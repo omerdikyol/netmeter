@@ -5,11 +5,13 @@ Linux system tray). See your **current speed** at a glance and your **total
 usage over any timeline** — handy when you are on a phone hotspot and need to
 watch your data.
 
-Built in Rust with a native tray — no Electron, no webview.
+Built in Rust: a native tray plus the system webview for the panel. No Electron,
+no bundled browser.
 
-> Status: early development. The menu bar app, the sampling/storage/reporting
-> core and the CLI all work and are tested (see [Roadmap](#roadmap)).
-> Per-interface selection, range presets and data-cap alerts are next.
+> Status: early development but usable. Left-click the menu bar icon for a panel
+> with a live graph, any time range, per-app and per-interface totals, and cap
+> progress. Everything is tested (see [Roadmap](#roadmap)); cap notifications and
+> packaging are what is left.
 
 ## Why
 
@@ -22,13 +24,17 @@ Phone hotspots and mobile plans have data caps. NetMeter shows, live:
 
 ## Design
 
-- **Native, not a webview.** Uses [`tray-icon`] + [`tao`] rather than Tauri or
-  Electron, so it stays small and light for an always-running menubar app.
+- **No bundled browser.** The tray uses [`tray-icon`] + [`tao`], and the panel is
+  drawn by the system webview (WebKit on macOS), so nothing like Chromium ships
+  with the app. Sampling is just a counter read per second, so it is idle-cheap.
 - **Cross-platform counters.** Per-interface bytes come from [`sysinfo`], which
   reads `getifaddrs` on macOS, `/proc/net/dev` on Linux and `GetIfTable2` on
   Windows.
+- **Per-app usage on macOS.** Taken from the system `nettop`, sampled every few
+  seconds and diffed, so per-app totals count only what happened while NetMeter
+  was running. Windows and Linux would need their own mechanism.
 - **UI-free core.** All logic lives in `netmeter-core` and is unit-tested; the
-  tray and CLI are thin layers on top.
+  panel, tray and CLI are thin layers on top.
 - **Reset-safe.** Interface counters restart on reboot or link flap; NetMeter
   never reports a negative or inflated delta.
 - **Local only.** History is a SQLite file on your machine. Nothing is uploaded.
@@ -74,8 +80,21 @@ netmeter sample --interval 1               # live rate in the terminal
 netmeter config                            # show paths and current config
 ```
 
-Running `netmeter` with no subcommand starts the menu bar app: the title shows
-the live transfer rate and the menu shows today's and this cycle's totals.
+Running `netmeter` with no subcommand starts the menu bar app. The bar itself
+stays quiet (an activity glyph by default); **left-click it** for the panel, or
+right-click for a small menu.
+
+## The panel
+
+- **Live graph** of download (filled) and upload (dashed), with a hover readout.
+- **Any time range**: quick chips (1H / 6H / 12H / 24H / 7D / 30D / Today /
+  Cycle), a custom range with explicit From and To dates and times, and
+  **drag across the chart** to zoom straight into a window. A **Reset** button
+  appears whenever you are on a custom range and returns you to the last preset.
+- **Totals** for today and the current cycle, plus cap progress and the reset day
+  when a plan is configured.
+- **Usage by Apps or Interfaces** — per-app totals since launch (macOS), or
+  per-interface totals for the selected range.
 
 ### If the icon does not appear
 
@@ -93,7 +112,7 @@ Run `netmeter config` to see the exact paths.
 [general]
 sample_interval_ms = 1000
 launch_at_login = false
-menu_bar = "rate"      # rate | total | icon
+menu_bar = "icon"      # icon | rate | total
 unit = "auto"          # auto | binary | decimal
 
 [tracking]
@@ -112,17 +131,19 @@ warn_at = [0.8, 1.0]
 
 - [x] **M0–M1** — workspace, config, reset-safe sampler, SQLite store, reporting
       engine, CLI, tests, CI
-- [x] **M2** — menu bar / tray app with a live rate in the title
-- [ ] **M3** — per-interface menu and range presets
-- [ ] **M4** — data cap, reset cycle and threshold notifications
+- [x] **M2** — menu bar app and the webview panel
+- [x] **M3** — per-interface and per-app views, quick and arbitrary ranges,
+      drag-to-zoom
+- [ ] **M4** — threshold notifications against the cap (the cap UI is done)
 - [ ] **M5** — cross-platform releases and Homebrew formula
 
 ## Project layout
 
 ```
 crates/netmeter-core   sampling, storage, stats, config (no UI; unit-tested)
-crates/netmeter        tray app + CLI
-assets/fonts           bundled font used to draw the menu bar text
+crates/netmeter        tray app, panel host, per-app sampler and CLI
+ui/index.html          the panel itself (HTML/CSS/JS, no build step)
+assets/fonts           bundled font, used when the bar shows a number
 packaging/macos        Info.plist and a script to assemble a .app bundle
 ```
 

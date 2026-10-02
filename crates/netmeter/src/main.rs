@@ -1,7 +1,10 @@
+mod apps;
 mod cli;
 mod icon_text;
 mod instance;
 mod menu;
+mod menu_icon;
+mod panel;
 mod tray;
 
 use anyhow::Result;

@@ -22,5 +22,7 @@ serde_json.workspace = true
 clap.workspace = true
 chrono.workspace = true
 tray-icon = "0.24.2"
-tao = "0.36.0"
+tao = { version = "0.36.0", features = ["rwh_06"] }
 fontdue = "0.9.4"
+wry = "0.56.1"
+window-vibrancy = "0.8.1"

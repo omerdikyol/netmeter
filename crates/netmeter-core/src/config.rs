@@ -49,7 +49,8 @@ impl Default for General {
         Self {
             sample_interval_ms: 1000,
             launch_at_login: false,
-            menu_bar: MenuBarMode::Rate,
+            // A quiet icon by default; the numbers live in the panel.
+            menu_bar: MenuBarMode::Icon,
             unit: UnitSystem::Auto,
         }
     }

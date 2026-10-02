@@ -41,32 +41,72 @@ pub fn month_start(now: DateTime<Local>) -> DateTime<Local> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Range {
     LastHour,
+    Last6Hours,
+    Last12Hours,
     Today,
     Last24Hours,
     Last7Days,
+    Last30Days,
     ThisMonth,
     BillingCycle,
     Custom { from: i64, to: i64 },
 }
 
 impl Range {
-    pub const PRESETS: [Range; 5] = [
+    pub const PRESETS: [Range; 8] = [
         Range::LastHour,
+        Range::Last6Hours,
+        Range::Last12Hours,
         Range::Today,
+        Range::Last24Hours,
         Range::Last7Days,
-        Range::ThisMonth,
+        Range::Last30Days,
         Range::BillingCycle,
     ];
+
+    /// Stable identifier used by the panel UI.
+    pub fn key(self) -> &'static str {
+        match self {
+            Range::LastHour => "1h",
+            Range::Last6Hours => "6h",
+            Range::Last12Hours => "12h",
+            Range::Today => "today",
+            Range::Last24Hours => "24h",
+            Range::Last7Days => "7d",
+            Range::Last30Days => "30d",
+            Range::ThisMonth => "month",
+            Range::BillingCycle => "cycle",
+            Range::Custom { .. } => "custom",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Range> {
+        Some(match key {
+            "1h" => Range::LastHour,
+            "6h" => Range::Last6Hours,
+            "12h" => Range::Last12Hours,
+            "today" => Range::Today,
+            "24h" => Range::Last24Hours,
+            "7d" => Range::Last7Days,
+            "30d" => Range::Last30Days,
+            "month" => Range::ThisMonth,
+            "cycle" => Range::BillingCycle,
+            _ => return None,
+        })
+    }
 
     pub fn label(self) -> &'static str {
         match self {
             Range::LastHour => "Last hour",
+            Range::Last6Hours => "Last 6 hours",
+            Range::Last12Hours => "Last 12 hours",
             Range::Today => "Today",
             Range::Last24Hours => "Last 24 hours",
             Range::Last7Days => "Last 7 days",
+            Range::Last30Days => "Last 30 days",
             Range::ThisMonth => "This month",
             Range::BillingCycle => "Billing cycle",
-            Range::Custom { .. } => "Custom",
+            Range::Custom { .. } => "Custom range",
         }
     }
 
@@ -75,9 +115,12 @@ impl Range {
         let now_ts = now.timestamp();
         match self {
             Range::LastHour => (now_ts - HOUR, now_ts),
+            Range::Last6Hours => (now_ts - 6 * HOUR, now_ts),
+            Range::Last12Hours => (now_ts - 12 * HOUR, now_ts),
             Range::Today => (local_midnight(now).timestamp(), now_ts),
             Range::Last24Hours => (now_ts - DAY, now_ts),
             Range::Last7Days => (now_ts - 7 * DAY, now_ts),
+            Range::Last30Days => (now_ts - 30 * DAY, now_ts),
             Range::ThisMonth => (month_start(now).timestamp(), now_ts),
             Range::BillingCycle => (cycle_start(now, plan).timestamp(), now_ts),
             Range::Custom { from, to } => (from, to),

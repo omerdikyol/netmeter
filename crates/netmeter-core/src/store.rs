@@ -133,6 +133,24 @@ impl Store {
         Ok(series)
     }
 
+    /// Totals for `[from, to)`, grouped per interface, busiest first.
+    pub fn query_by_interface(&self, from: i64, to: i64) -> Result<Vec<(String, Traffic)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT iface, COALESCE(SUM(rx_bytes), 0), COALESCE(SUM(tx_bytes), 0) FROM usage \
+             WHERE ts >= ?1 AND ts < ?2 GROUP BY iface \
+             ORDER BY SUM(rx_bytes) + SUM(tx_bytes) DESC",
+        )?;
+        let rows = stmt
+            .query_map(params![from, to], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    Traffic::new(r.get::<_, i64>(1)? as u64, r.get::<_, i64>(2)? as u64),
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
     /// Interfaces seen in stored history.
     pub fn interfaces(&self) -> Result<Vec<String>> {
         let mut stmt = self
@@ -233,6 +251,19 @@ mod tests {
         assert_eq!(series.len(), 2);
         assert_eq!(series[0], (0, Traffic::new(30, 0)));
         assert_eq!(series[1], (120, Traffic::new(30, 0)));
+    }
+
+    #[test]
+    fn groups_totals_per_interface_busiest_first() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .add_usage(60, &buckets(&[("en0", 100, 0), ("en6", 5_000, 0)]))
+            .unwrap();
+        store.add_usage(120, &buckets(&[("en0", 200, 0)])).unwrap();
+
+        let per_iface = store.query_by_interface(0, 1_000).unwrap();
+        assert_eq!(per_iface[0], ("en6".to_string(), Traffic::new(5_000, 0)));
+        assert_eq!(per_iface[1], ("en0".to_string(), Traffic::new(300, 0)));
     }
 
     #[test]

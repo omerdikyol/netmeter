@@ -87,6 +87,12 @@ impl Tracker {
         self.report(Range::BillingCycle, None)
     }
 
+    /// Totals for a range, grouped per interface, busiest first.
+    pub fn per_interface(&self, range: Range) -> Result<Vec<(String, Traffic)>> {
+        let (from, to) = range.resolve(Local::now(), &self.config.plan);
+        self.store.query_by_interface(from, to)
+    }
+
     pub fn plan(&self) -> &Plan {
         &self.config.plan
     }
