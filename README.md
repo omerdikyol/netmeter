@@ -7,8 +7,9 @@ watch your data.
 
 Built in Rust with a native tray — no Electron, no webview.
 
-> Status: early development. The sampling, storage and reporting core plus a CLI
-> are working and tested (see [Roadmap](#roadmap)). The menu bar UI is next.
+> Status: early development. The menu bar app, the sampling/storage/reporting
+> core and the CLI all work and are tested (see [Roadmap](#roadmap)).
+> Per-interface selection, range presets and data-cap alerts are next.
 
 ## Why
 
@@ -43,6 +44,16 @@ cd netmeter
 cargo build --release
 ```
 
+On macOS, wrap the binary in a `.app` so the system treats it as a menu bar app
+(no Dock icon) and launch it:
+
+```sh
+packaging/macos/bundle.sh
+open dist/NetMeter.app
+```
+
+`./target/release/netmeter` also starts the tray app directly.
+
 Requirements: Rust 1.80+. On Linux the tray needs an appindicator host:
 
 ```sh
@@ -63,7 +74,15 @@ netmeter sample --interval 1               # live rate in the terminal
 netmeter config                            # show paths and current config
 ```
 
-Running `netmeter` with no subcommand will start the menu bar app.
+Running `netmeter` with no subcommand starts the menu bar app: the title shows
+the live transfer rate and the menu shows today's and this cycle's totals.
+
+### If the icon does not appear
+
+On macOS, menu bar managers such as [Ice] or Bartender hide new items by
+default: they are moved off-screen into a "hidden" section until you reveal
+them. If NetMeter is running but you cannot see it, open that manager (click its
+icon or its settings) and move NetMeter to the always-visible section.
 
 ## Configuration
 
@@ -93,7 +112,7 @@ warn_at = [0.8, 1.0]
 
 - [x] **M0–M1** — workspace, config, reset-safe sampler, SQLite store, reporting
       engine, CLI, tests, CI
-- [ ] **M2** — menu bar / tray app with live rate
+- [x] **M2** — menu bar / tray app with a live rate in the title
 - [ ] **M3** — per-interface menu and range presets
 - [ ] **M4** — data cap, reset cycle and threshold notifications
 - [ ] **M5** — cross-platform releases and Homebrew formula
@@ -103,7 +122,15 @@ warn_at = [0.8, 1.0]
 ```
 crates/netmeter-core   sampling, storage, stats, config (no UI; unit-tested)
 crates/netmeter        tray app + CLI
+assets/fonts           bundled font used to draw the menu bar text
+packaging/macos        Info.plist and a script to assemble a .app bundle
 ```
+
+## Third-party assets
+
+- `assets/fonts/JetBrainsMono-Regular.ttf` — JetBrains Mono, licensed under the
+  SIL Open Font License 1.1 (see `assets/fonts/OFL.txt`). Bundled only to render
+  the menu bar text.
 
 ## License
 
@@ -113,3 +140,4 @@ Dual-licensed under either of [MIT](LICENSE-MIT) or
 [`tray-icon`]: https://github.com/tauri-apps/tray-icon
 [`tao`]: https://github.com/tauri-apps/tao
 [`sysinfo`]: https://github.com/GuillaumeGomez/sysinfo
+[Ice]: https://github.com/jordanbaird/Ice

@@ -1,7 +1,11 @@
 mod cli;
+mod icon_text;
+mod instance;
+mod menu;
+mod tray;
 
 use anyhow::Result;
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
@@ -37,11 +41,7 @@ fn main() -> Result<()> {
         Some(Command::Sample { interval }) => cli::sample(interval),
         Some(Command::Report(args)) => cli::report(args),
         Some(Command::Config) => cli::print_config(),
-        None => {
-            // The tray app arrives in the next milestone.
-            Cli::command().print_help()?;
-            println!();
-            Ok(())
-        }
+        // No subcommand: start the menu bar / tray app.
+        None => tray::run(),
     }
 }
