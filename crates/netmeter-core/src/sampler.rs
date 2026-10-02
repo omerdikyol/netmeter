@@ -161,6 +161,18 @@ impl Sampler {
         }
     }
 
+    /// Traffic accumulated so far in the minute that is still in progress.
+    pub fn current_bucket(&self) -> Option<(i64, Traffic)> {
+        if self.bucket.is_empty() {
+            return None;
+        }
+        let total = self
+            .bucket
+            .values()
+            .fold(Traffic::ZERO, |acc, traffic| acc + *traffic);
+        Some((self.bucket_start, total))
+    }
+
     pub fn interface_names(&self) -> Vec<String> {
         let mut names: Vec<String> = self.networks.keys().cloned().collect();
         names.sort();

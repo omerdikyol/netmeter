@@ -17,9 +17,12 @@ const RATE_WINDOW_MS: u64 = 5_000;
 #[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum RangeArg {
     LastHour,
+    Last6hours,
+    Last12hours,
     Today,
     Last24h,
     Last7days,
+    Last30days,
     Thismonth,
     Cycle,
 }
@@ -28,9 +31,12 @@ impl RangeArg {
     fn to_range(self) -> Range {
         match self {
             RangeArg::LastHour => Range::LastHour,
+            RangeArg::Last6hours => Range::Last6Hours,
+            RangeArg::Last12hours => Range::Last12Hours,
             RangeArg::Today => Range::Today,
             RangeArg::Last24h => Range::Last24Hours,
             RangeArg::Last7days => Range::Last7Days,
+            RangeArg::Last30days => Range::Last30Days,
             RangeArg::Thismonth => Range::ThisMonth,
             RangeArg::Cycle => Range::BillingCycle,
         }

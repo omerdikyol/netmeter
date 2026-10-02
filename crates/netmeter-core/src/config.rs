@@ -3,16 +3,16 @@ use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-/// Which quantity the menu bar title shows.
+/// Which quantity the menu bar itself shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MenuBarMode {
-    /// Live transfer rate (default).
+    /// Just the activity glyph (default); the numbers live in the panel.
+    Icon,
+    /// Live transfer rate.
     Rate,
     /// Total transferred in the current billing cycle.
     Total,
-    /// Static icon only; all numbers live in the menu.
-    Icon,
 }
 
 /// Unit system for display.
@@ -39,7 +39,6 @@ pub enum Cycle {
 #[serde(default)]
 pub struct General {
     pub sample_interval_ms: u64,
-    pub launch_at_login: bool,
     pub menu_bar: MenuBarMode,
     pub unit: UnitSystem,
 }
@@ -48,28 +47,9 @@ impl Default for General {
     fn default() -> Self {
         Self {
             sample_interval_ms: 1000,
-            launch_at_login: false,
             // A quiet icon by default; the numbers live in the panel.
             menu_bar: MenuBarMode::Icon,
             unit: UnitSystem::Auto,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Tracking {
-    /// Interfaces to include. Empty means "all interfaces".
-    pub interfaces: Vec<String>,
-    /// Follow whichever interface carries the default route.
-    pub follow_default: bool,
-}
-
-impl Default for Tracking {
-    fn default() -> Self {
-        Self {
-            interfaces: Vec::new(),
-            follow_default: true,
         }
     }
 }
@@ -103,7 +83,6 @@ impl Default for Plan {
 #[serde(default)]
 pub struct Config {
     pub general: General,
-    pub tracking: Tracking,
     pub plan: Plan,
 }
 
@@ -174,7 +153,7 @@ mod tests {
     fn defaults_are_sane() {
         let c = Config::default();
         assert_eq!(c.general.sample_interval_ms, 1000);
-        assert!(c.tracking.follow_default);
+        assert_eq!(c.general.menu_bar, MenuBarMode::Icon);
         assert!(!c.plan.enabled);
         assert_eq!(c.plan.warn_at, vec![0.8, 1.0]);
     }
@@ -185,7 +164,6 @@ mod tests {
         c.plan.enabled = true;
         c.plan.cap_bytes = 50_000_000_000;
         c.plan.reset_day = 15;
-        c.tracking.interfaces = vec!["en6".into()];
 
         let text = c.to_toml().unwrap();
         let back: Config = toml::from_str(&text).unwrap();
@@ -193,13 +171,22 @@ mod tests {
         assert!(back.plan.enabled);
         assert_eq!(back.plan.cap_bytes, 50_000_000_000);
         assert_eq!(back.plan.reset_day, 15);
-        assert_eq!(back.tracking.interfaces, vec!["en6".to_string()]);
     }
 
     #[test]
     fn partial_toml_falls_back_to_defaults() {
         let c: Config = toml::from_str("[general]\nsample_interval_ms = 500\n").unwrap();
         assert_eq!(c.general.sample_interval_ms, 500);
-        assert!(c.tracking.follow_default);
+        assert_eq!(c.general.menu_bar, MenuBarMode::Icon);
+    }
+
+    #[test]
+    fn config_from_an_older_build_still_loads() {
+        // Sections we have since dropped must not stop the file parsing.
+        let text = "[general]\nsample_interval_ms = 500\nlaunch_at_login = true\n\n\
+                    [tracking]\ninterfaces = [\"en0\"]\nfollow_default = false\n";
+        let c: Config = toml::from_str(text).expect("an older config should still load");
+        assert_eq!(c.general.sample_interval_ms, 500);
+        assert_eq!(c.general.menu_bar, MenuBarMode::Icon);
     }
 }

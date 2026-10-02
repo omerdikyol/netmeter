@@ -153,6 +153,19 @@ packaging/macos        Info.plist and a script to assemble a .app bundle
   SIL Open Font License 1.1 (see `assets/fonts/OFL.txt`). Bundled only to render
   the menu bar text.
 
+## Development
+
+The panel can be shown without clicking the tray icon, which is handy while
+working on the UI:
+
+```sh
+NETMETER_PREVIEW_PANEL=1 cargo run                 # open the panel on launch
+NETMETER_PREVIEW_PANEL=1 NETMETER_PREVIEW_DELAY_MS=4000 cargo run
+                                                  # ...a few seconds later
+NETMETER_PREVIEW_SHEET=1 cargo run                 # with the range sheet open
+NETMETER_KEEP_OPEN=1 cargo run                     # never dismiss on focus loss
+```
+
 ## License
 
 Dual-licensed under either of [MIT](LICENSE-MIT) or

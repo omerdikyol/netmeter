@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="light dark">
 <title>NetMeter</title>
 <style>
   :root {
@@ -11,10 +11,11 @@
     --tx: #ff9f0a;
     --fg: #f2f2f7;
     --fg-dim: rgba(235, 235, 245, 0.55);
-    --fg-faint: rgba(235, 235, 245, 0.32);
+    --fg-faint: rgba(235, 235, 245, 0.38);
     --line: rgba(255, 255, 255, 0.08);
     --card: rgba(255, 255, 255, 0.05);
     --card-hi: rgba(255, 255, 255, 0.1);
+    --grid: rgba(255, 255, 255, 0.07);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -87,14 +88,17 @@
   /* ---------- range sheet ---------- */
   .sheet {
     position: absolute; left: 10px; right: 10px; top: 72px;
-    display: none; flex-direction: column; gap: 8px;
+    display: flex; flex-direction: column; gap: 8px;
     padding: 10px; z-index: 6;
     background: rgba(22, 22, 25, 0.97);
     border: 1px solid rgba(255, 255, 255, 0.11);
     border-radius: 11px;
     box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+    opacity: 0; transform: translateY(-6px) scale(0.985);
+    pointer-events: none;
+    transition: opacity 0.13s ease, transform 0.13s ease;
   }
-  .sheet.open { display: flex; }
+  .sheet.open { opacity: 1; transform: none; pointer-events: auto; }
   .sheet-title {
     font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em;
     text-transform: uppercase; color: var(--fg-faint);
@@ -233,6 +237,34 @@
     font: inherit; font-size: 10.5px; cursor: default; padding: 0;
   }
   footer button:hover { color: var(--fg); }
+
+  /* ---------- light appearance ---------- */
+  @media (prefers-color-scheme: light) {
+    :root {
+      --rx: #0071e3;
+      --tx: #c26a00;
+      --fg: #1c1c1e;
+      --fg-dim: rgba(60, 60, 67, 0.62);
+      --fg-faint: rgba(60, 60, 67, 0.5);
+      --line: rgba(0, 0, 0, 0.1);
+      --card: rgba(0, 0, 0, 0.045);
+      --card-hi: rgba(0, 0, 0, 0.085);
+      --grid: rgba(0, 0, 0, 0.1);
+    }
+    #app { background: rgba(250, 250, 252, 0.62); }
+    .sheet {
+      background: rgba(252, 252, 253, 0.98);
+      border-color: rgba(0, 0, 0, 0.1);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+    }
+    .field input { background: rgba(0, 0, 0, 0.05); }
+    .field input::-webkit-calendar-picker-indicator { filter: none; }
+    #tip { background: rgba(255, 255, 255, 0.97); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16); }
+    .cap-bar { background: rgba(0, 0, 0, 0.1); }
+    #sel { background: rgba(0, 113, 227, 0.14); }
+    .chip.on { color: #fff; }
+    .custom button { color: #fff; }
+  }
 </style>
 </head>
 <body>
@@ -273,7 +305,7 @@
   <section class="chart" id="chart">
     <svg id="graph" viewBox="0 0 300 108" preserveAspectRatio="none"></svg>
     <div id="sel"></div>
-    <div id="empty" class="empty">Collecting data&hellip;</div>
+    <div id="empty" class="empty">Not enough data yet</div>
     <div id="tip"></div>
     <div class="peak" id="peak"></div>
     <div class="axis-x"><span id="x-from"></span><span id="x-to"></span></div>
@@ -326,6 +358,17 @@
   var post = function (msg) { window.ipc.postMessage(JSON.stringify(msg)); };
   var sheetOpen = false;
 
+  /* Colours live in CSS so light and dark stay in one place. */
+  function themeColors() {
+    var cs = getComputedStyle(document.documentElement);
+    return {
+      rx: cs.getPropertyValue("--rx").trim() || "#4da3ff",
+      tx: cs.getPropertyValue("--tx").trim() || "#ff9f0a",
+      grid: cs.getPropertyValue("--grid").trim() || "rgba(255,255,255,0.05)"
+    };
+  }
+  var THEME = themeColors();
+
   /* ---------- formatting ---------- */
   function split(value) {
     var i = 0; value = Math.max(0, value);
@@ -343,6 +386,10 @@
   function rateShort(v) {
     var p = split(v), n = p[1] === 0 ? String(Math.round(p[0])) : p[0].toFixed(p[0] < 10 ? 1 : 0);
     return n + UNITS[p[1]];
+  }
+  function rateText(v) {
+    var p = split(v), n = p[1] === 0 ? String(Math.round(p[0])) : p[0].toFixed(p[0] < 10 ? 2 : 1);
+    return n + " " + UNITS[p[1]] + "/s";
   }
   function clockTime(ts) { return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
   function stamp(ts) {
@@ -467,20 +514,29 @@
     }
     empty.style.display = "none";
 
+    // Each point holds the bytes for one bucket; the graph shows rates, so
+    // divide by the bucket width.
+    var secs = s.bucketSecs || 1;
+    var asRate = function (point) { return { rx: point.rx / secs, tx: point.tx / secs }; };
+
     var max = 1;
-    for (var i = 0; i < pts.length; i++) { max = Math.max(max, pts[i].rx, pts[i].tx); }
+    for (var i = 0; i < pts.length; i++) {
+      var r = asRate(pts[i]);
+      max = Math.max(max, r.rx, r.tx);
+    }
     var top = max * 1.15;
-    peak.textContent = "peak " + rateShort(max) + "/s";
+    peak.textContent = "peak " + rateText(max);
 
     var px = function (i) { return (i / (pts.length - 1)) * W; };
     var py = function (v) { return H - PADB - (v / top) * (H - PADT - PADB); };
 
     var rxLine = "", txLine = "", area = "M 0 " + H;
     for (var j = 0; j < pts.length; j++) {
+      var rate = asRate(pts[j]);
       var x = px(j).toFixed(1);
-      rxLine += (j ? " L " : "M ") + x + " " + py(pts[j].rx).toFixed(1);
-      txLine += (j ? " L " : "M ") + x + " " + py(pts[j].tx).toFixed(1);
-      area += " L " + x + " " + py(pts[j].rx).toFixed(1);
+      rxLine += (j ? " L " : "M ") + x + " " + py(rate.rx).toFixed(1);
+      txLine += (j ? " L " : "M ") + x + " " + py(rate.tx).toFixed(1);
+      area += " L " + x + " " + py(rate.rx).toFixed(1);
     }
     area += " L " + W + " " + H + " Z";
 
@@ -488,18 +544,18 @@
     for (var g = 1; g <= 3; g++) {
       var gy = (PADT + (H - PADT - PADB) * (g / 4)).toFixed(1);
       grid += '<line x1="0" y1="' + gy + '" x2="' + W + '" y2="' + gy +
-              '" stroke="rgba(255,255,255,0.05)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+              '" stroke="' + THEME.grid + '" stroke-width="1" vector-effect="non-scaling-stroke"/>';
     }
 
     svg.innerHTML =
       '<defs><linearGradient id="rxg" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0%" stop-color="' + s.colors.rx + '" stop-opacity="0.42"/>' +
-      '<stop offset="100%" stop-color="' + s.colors.rx + '" stop-opacity="0.02"/></linearGradient></defs>' +
+      '<stop offset="0%" stop-color="' + THEME.rx + '" stop-opacity="0.42"/>' +
+      '<stop offset="100%" stop-color="' + THEME.rx + '" stop-opacity="0.02"/></linearGradient></defs>' +
       grid +
       '<path d="' + area + '" fill="url(#rxg)" stroke="none"/>' +
-      '<path d="' + rxLine + '" fill="none" stroke="' + s.colors.rx +
+      '<path d="' + rxLine + '" fill="none" stroke="' + THEME.rx +
       '" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
-      '<path d="' + txLine + '" fill="none" stroke="' + s.colors.tx +
+      '<path d="' + txLine + '" fill="none" stroke="' + THEME.tx +
       '" stroke-width="1.2" stroke-dasharray="3 2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>';
 
     var span = (s.window[1] - s.window[0]) || 1;
@@ -513,9 +569,9 @@
       var rel = (ev.clientX - box.left) / box.width;
       if (rel < 0 || rel > 1) { tip.style.display = "none"; return; }
       var idx = Math.max(0, Math.min(pts.length - 1, Math.round(rel * (pts.length - 1))));
-      var p = pts[idx];
-      tip.innerHTML = stamp(p.t) + "<br>&#8595; <b>" + rateShort(p.rx) + "B/s</b>" +
-                      "<br>&#8593; <b>" + rateShort(p.tx) + "B/s</b>";
+      var point = asRate(pts[idx]);
+      tip.innerHTML = stamp(pts[idx].t) + "<br>&#8595; <b>" + rateText(point.rx) + "</b>" +
+                      "<br>&#8593; <b>" + rateText(point.tx) + "</b>";
       tip.style.display = "block";
       var tw = tip.offsetWidth;
       tip.style.left = Math.max(0, Math.min(box.width - tw, ev.clientX - box.left - tw / 2)) + "px";
@@ -599,7 +655,7 @@
       }
       s.apps.forEach(function (a) {
         var live = a.rateRx + a.rateTx > 0
-          ? "\u2193" + rateShort(a.rateRx) + " \u2191" + rateShort(a.rateTx) : "";
+          ? "\u2193" + rateShort(a.rateRx) + "/s \u2191" + rateShort(a.rateTx) + "/s" : "";
         host.appendChild(row(a.name, live, bytes(a.total)));
       });
       return;
@@ -611,20 +667,24 @@
     }
     s.interfaces.forEach(function (i) {
       var live = i.rateRx + i.rateTx > 0
-        ? "\u2193" + rateShort(i.rateRx) + " \u2191" + rateShort(i.rateTx) : "";
+        ? "\u2193" + rateShort(i.rateRx) + "/s \u2191" + rateShort(i.rateTx) + "/s" : "";
       host.appendChild(row(i.name, live, bytes(i.total)));
     });
   }
 
   /* ---------- main render ---------- */
-  function render(s) {
-    state = s;
-
-    var rx = rateParts(s.rate.rx), tx = rateParts(s.rate.tx);
+  function renderRate(r) {
+    var rx = rateParts(r.rx), tx = rateParts(r.tx);
     el("rate-rx").textContent = rx[0];
     el("unit-rx").textContent = rx[1];
     el("rate-tx").textContent = tx[0];
     el("unit-tx").textContent = tx[1];
+  }
+
+  function render(s) {
+    state = s;
+
+    renderRate(s.rate);
 
     el("range-label").textContent = describe(s);
     el("range-total").textContent = bytes(s.totals.total);
@@ -669,10 +729,14 @@
     } else {
       el("note").textContent = "Drag the chart to zoom";
     }
-    document.title = "NetMeter " + s.rangeLabel;
   }
 
-  window.netmeter = { update: render };
+  window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", function () {
+    THEME = themeColors();
+    if (state) { render(state); }
+  });
+
+  window.netmeter = { update: render, rate: renderRate };
   post({ type: "ready" });
   if (window.__netmeterRevealSheet) { setSheet(true); }
 })();

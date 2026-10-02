@@ -26,10 +26,18 @@ const ICON_FONT_PX: f32 = 12.0;
 const PREVIEW_ENV: &str = "NETMETER_PREVIEW_PANEL";
 /// Also pop the range sheet open on launch, for UI work.
 const PREVIEW_SHEET_ENV: &str = "NETMETER_PREVIEW_SHEET";
+/// Show the panel this many milliseconds after launch (instead of immediately),
+/// so UI work can exercise the panel opening after the app has settled.
+const PREVIEW_DELAY_ENV: &str = "NETMETER_PREVIEW_DELAY_MS";
+/// Never dismiss the panel on focus loss; for staring at the UI while working.
+const KEEP_OPEN_ENV: &str = "NETMETER_KEEP_OPEN";
 /// Ignore a focus loss this soon after opening, so a click can finish landing.
 const FOCUS_GRACE: Duration = Duration::from_millis(320);
 /// How often to poll per-app usage.
 const APP_SAMPLE_INTERVAL: Duration = Duration::from_secs(4);
+/// Send the database-backed panel state every Nth sample; the live rate goes
+/// out on every other one.
+const STATE_EVERY: u32 = 3;
 
 #[cfg(target_os = "macos")]
 const ICON_COLOR: [u8; 4] = [0, 0, 0, 255];
@@ -46,6 +54,13 @@ enum UserEvent {
     Ipc(String),
 }
 
+/// When to show the panel for UI work.
+#[derive(Debug, Clone, Copy)]
+enum AutoShow {
+    Now,
+    After(Duration),
+}
+
 struct App {
     tracker: Tracker,
     tray: TrayIcon,
@@ -58,12 +73,26 @@ struct App {
     last_live: HashMap<String, Rate>,
     last_icon_label: Option<String>,
     shown_at: Option<Instant>,
-    preview: bool,
+    ticks: u32,
+    started: Instant,
+    auto_show: Option<AutoShow>,
+    keep_open: bool,
 }
 
 impl App {
     fn new(config: Config, tracker: Tracker, panel: Panel) -> Result<Self> {
         let mode = config.general.menu_bar;
+        let auto_show = if std::env::var(PREVIEW_ENV).is_ok() {
+            match std::env::var(PREVIEW_DELAY_ENV)
+                .ok()
+                .and_then(|ms| ms.parse::<u64>().ok())
+            {
+                Some(ms) => Some(AutoShow::After(Duration::from_millis(ms))),
+                None => Some(AutoShow::Now),
+            }
+        } else {
+            None
+        };
 
         let mut builder = TrayIconBuilder::new()
             .with_tooltip("NetMeter")
@@ -89,8 +118,30 @@ impl App {
             last_live: HashMap::new(),
             last_icon_label: None,
             shown_at: None,
-            preview: std::env::var(PREVIEW_ENV).is_ok(),
+            ticks: 0,
+            started: Instant::now(),
+            auto_show,
+            keep_open: std::env::var(KEEP_OPEN_ENV).is_ok(),
         })
+    }
+
+    /// Show the panel for UI work: at once, or after a delay so the opening
+    /// path runs once the app has settled.
+    fn maybe_auto_show(&mut self) {
+        let Some(pending) = self.auto_show else {
+            return;
+        };
+        match pending {
+            AutoShow::Now => {
+                self.auto_show = None;
+                self.toggle_panel(None);
+            }
+            AutoShow::After(delay) if self.started.elapsed() >= delay => {
+                self.auto_show = None;
+                self.toggle_panel(None);
+            }
+            AutoShow::After(_) => {}
+        }
     }
 
     fn toggle_panel(&mut self, anchor: Option<Anchor>) {
@@ -106,9 +157,10 @@ impl App {
         self.push_state();
     }
 
+    /// Ignore a focus loss this soon after opening, so the click that opened
+    /// the panel can finish landing.
     fn on_focus_lost(&mut self) {
-        // Preview mode is for staring at the panel; never dismiss it there.
-        if self.preview {
+        if self.keep_open {
             return;
         }
         if let Some(at) = self.shown_at {
@@ -130,11 +182,31 @@ impl App {
         self.last_rate = tick.rate;
         self.last_live = tick.per_interface_rate;
 
-        match self.tracker.cycle_usage() {
-            Ok(cycle) => self.update_title(tick.rate, cycle.total()),
-            Err(err) => eprintln!("netmeter: {err:#}"),
+        // Only the text modes need the cycle total, and it costs a query.
+        if self.mode != MenuBarMode::Icon {
+            match self.tracker.cycle_usage() {
+                Ok(cycle) => self.update_title(tick.rate, cycle.total()),
+                Err(err) => eprintln!("netmeter: {err:#}"),
+            }
         }
-        self.push_state();
+
+        // The live rate is free to send every second; the rest of the panel
+        // needs several queries, so it goes out less often.
+        self.ticks = self.ticks.wrapping_add(1);
+        if self.panel.is_visible() {
+            if self.ticks % STATE_EVERY == 0 {
+                self.push_state();
+            } else {
+                self.push_rate();
+            }
+        }
+    }
+
+    fn push_rate(&mut self) {
+        let rate = self.last_rate;
+        if let Err(err) = self.panel.push_rate(rate.rx_per_sec, rate.tx_per_sec) {
+            eprintln!("netmeter: {err:#}");
+        }
     }
 
     /// Update the menu bar title for the optional text modes.
@@ -319,9 +391,7 @@ pub fn run() -> Result<()> {
                         None => {}
                     }
                     if let Some(instance) = app.as_mut() {
-                        if instance.preview {
-                            instance.toggle_panel(None);
-                        }
+                        instance.maybe_auto_show();
                     }
                 }
             }
@@ -362,6 +432,7 @@ pub fn run() -> Result<()> {
         }
 
         if let Some(instance) = app.as_mut() {
+            instance.maybe_auto_show();
             let now = Instant::now();
             if now >= next_tick {
                 instance.refresh();

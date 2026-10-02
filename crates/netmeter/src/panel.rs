@@ -72,12 +72,6 @@ struct PointDto {
 }
 
 #[derive(Serialize)]
-struct ColorsDto {
-    rx: &'static str,
-    tx: &'static str,
-}
-
-#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PlanDto {
     enabled: bool,
@@ -109,6 +103,8 @@ pub struct PanelState {
     custom: Option<[i64; 2]>,
     rate: RateDto,
     series: Vec<PointDto>,
+    /// Width of one series point, in seconds, so the UI can plot rates.
+    bucket_secs: i64,
     totals: TrafficDto,
     today: TrafficDto,
     cycle: TrafficDto,
@@ -117,7 +113,6 @@ pub struct PanelState {
     apps: Vec<AppUsage>,
     apps_supported: bool,
     apps_error: Option<String>,
-    colors: ColorsDto,
 }
 
 /// Bucket width that keeps the chart at a readable number of points.
@@ -129,6 +124,27 @@ fn bucket_for(range: Range) -> i64 {
         Range::Last7Days => 2 * stats::HOUR,
         Range::ThisMonth | Range::Last30Days | Range::BillingCycle => stats::DAY,
         Range::Custom { from, to } => ((to - from).max(1) / 100).max(stats::MINUTE),
+    }
+}
+
+/// Query the series, narrowing the buckets while the window is mostly empty so
+/// the graph has shape on a fresh install instead of one flat point.
+fn series_for(tracker: &Tracker, range: Range) -> Result<(Vec<PointDto>, i64)> {
+    let mut bucket = bucket_for(range);
+    loop {
+        let points: Vec<PointDto> = tracker
+            .series(range, None, bucket)?
+            .into_iter()
+            .map(|(t, traffic)| PointDto {
+                t,
+                rx: traffic.rx,
+                tx: traffic.tx,
+            })
+            .collect();
+        if points.len() >= 8 || bucket <= stats::MINUTE {
+            return Ok((points, bucket));
+        }
+        bucket = (bucket / 4).max(stats::MINUTE);
     }
 }
 
@@ -144,15 +160,25 @@ impl PanelState {
         let plan: &Plan = tracker.plan();
         let (from, to) = range.resolve(Local::now(), plan);
 
-        let series = tracker
-            .series(range, None, bucket_for(range))?
-            .into_iter()
-            .map(|(t, traffic)| PointDto {
-                t,
-                rx: traffic.rx,
-                tx: traffic.tx,
-            })
-            .collect();
+        let (mut series, bucket) = series_for(tracker, range)?;
+
+        // Include the minute still in progress, scaled up to a whole bucket so
+        // the last point does not dip simply because it is not finished yet.
+        if let Some((start, traffic)) = tracker.current_bucket() {
+            if start >= from && start < to {
+                let elapsed = (stats::unix_now() - start).clamp(1, bucket) as f64;
+                let scale = bucket as f64 / elapsed;
+                let live = PointDto {
+                    t: start,
+                    rx: (traffic.rx as f64 * scale) as u64,
+                    tx: (traffic.tx as f64 * scale) as u64,
+                };
+                match series.last_mut() {
+                    Some(last) if last.t == start => *last = live,
+                    _ => series.push(live),
+                }
+            }
+        }
 
         let interfaces = tracker
             .per_interface(range)?
@@ -185,6 +211,7 @@ impl PanelState {
                 tx: rate.tx_per_sec,
             },
             series,
+            bucket_secs: bucket,
             totals: tracker.report(range, None)?.into(),
             today: tracker.report(Range::Today, None)?.into(),
             cycle: cycle_traffic.into(),
@@ -203,10 +230,6 @@ impl PanelState {
             apps,
             apps_supported: apps_error.is_none(),
             apps_error,
-            colors: ColorsDto {
-                rx: "#4da3ff",
-                tx: "#ff9f0a",
-            },
         })
     }
 }
@@ -215,6 +238,27 @@ pub struct Panel {
     window: Window,
     webview: WebView,
 }
+
+/// Bring the app to the front so the panel can become the key window.
+///
+/// `tao`'s `set_focus` only calls `makeKeyAndOrderFront`, which is not enough
+/// for an accessory (menu bar only) app: without activating, the window never
+/// becomes key, so it never *loses* focus — and losing focus is what dismisses
+/// the panel when you click elsewhere.
+#[cfg(target_os = "macos")]
+fn activate_app() {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSApplication;
+
+    let Some(marker) = MainThreadMarker::new() else {
+        return;
+    };
+    let app = NSApplication::sharedApplication(marker);
+    app.activate();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn activate_app() {}
 
 impl Panel {
     pub fn new<T: 'static>(
@@ -235,9 +279,15 @@ impl Panel {
 
         #[cfg(target_os = "macos")]
         {
+            use tao::window::Theme;
             use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
-            // Blur behind the panel; the CSS only tints on top of it.
-            let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, Some(12.0));
+            // Blur behind the panel; the CSS only tints on top of it. The
+            // material follows the system appearance so light mode looks right.
+            let material = match window.theme() {
+                Theme::Light => NSVisualEffectMaterial::Popover,
+                _ => NSVisualEffectMaterial::HudWindow,
+            };
+            let _ = apply_vibrancy(&window, material, None, Some(12.0));
         }
 
         let mut builder = WebViewBuilder::new()
@@ -321,6 +371,7 @@ impl Panel {
         };
         self.window.set_outer_position(PhysicalPosition::new(x, y));
         self.window.set_visible(true);
+        activate_app();
         self.window.set_focus();
     }
 
@@ -331,6 +382,19 @@ impl Panel {
         self.webview.evaluate_script(&format!(
             "window.netmeter && window.netmeter.update({safe})"
         ))?;
+        Ok(())
+    }
+
+    /// Push just the live rate, which needs no database work and so can be sent
+    /// every tick while the heavier state is sent less often.
+    pub fn push_rate(&self, rx_per_sec: f64, tx_per_sec: f64) -> Result<()> {
+        let rate = RateDto {
+            rx: rx_per_sec,
+            tx: tx_per_sec,
+        };
+        let json = serde_json::to_string(&rate)?;
+        self.webview
+            .evaluate_script(&format!("window.netmeter && window.netmeter.rate({json})"))?;
         Ok(())
     }
 }

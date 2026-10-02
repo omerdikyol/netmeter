@@ -93,6 +93,11 @@ impl Tracker {
         self.store.query_by_interface(from, to)
     }
 
+    /// Traffic so far in the minute still in progress, if any.
+    pub fn current_bucket(&self) -> Option<(i64, Traffic)> {
+        self.sampler.current_bucket()
+    }
+
     pub fn plan(&self) -> &Plan {
         &self.config.plan
     }
