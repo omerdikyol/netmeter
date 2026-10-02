@@ -1,0 +1,17 @@
+[package]
+name = "netmeter-core"
+description = "Cross-platform network usage sampling, storage and reporting for NetMeter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+toml.workspace = true
+chrono.workspace = true
+directories.workspace = true
+sysinfo.workspace = true
+rusqlite.workspace = true
