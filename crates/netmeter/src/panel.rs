@@ -14,7 +14,7 @@ use netmeter_core::stats::{self, Range};
 use netmeter_core::Tracker;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tao::dpi::{LogicalSize, PhysicalPosition};
+use tao::dpi::LogicalSize;
 use tao::event_loop::EventLoopWindowTarget;
 use tao::window::{Window, WindowBuilder};
 use wry::{BackgroundThrottlingPolicy, WebView, WebViewBuilder};
@@ -290,6 +290,72 @@ fn activate_app() {
 #[cfg(not(target_os = "macos"))]
 fn activate_app() {}
 
+/// Where to put the panel, per platform.
+///
+/// On macOS this goes through AppKit rather than tao's `set_outer_position`,
+/// which does not land where it is asked to. AppKit is also what can tell us
+/// where the menu bar — and any notch — actually ends.
+#[cfg(target_os = "macos")]
+mod place {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSScreen, NSWindow};
+    use objc2_foundation::NSPoint;
+    use tao::platform::macos::WindowExtMacOS;
+    use tao::window::Window;
+
+    /// Gap below the menu bar, and from the screen's side edges.
+    const TOP_GAP: f64 = 5.0;
+    const SIDE_GAP: f64 = 8.0;
+
+    /// Put the window just under the menu bar: centred on `anchor_centre`
+    /// (points from the left of the screen) when given, else flush right.
+    pub fn under_menu_bar(window: &Window, anchor_centre: Option<f64>) {
+        let Some(marker) = MainThreadMarker::new() else {
+            return;
+        };
+        let Some(screen) = NSScreen::mainScreen(marker) else {
+            return;
+        };
+        let visible = screen.visibleFrame();
+        let size = window.outer_size().to_logical::<f64>(window.scale_factor());
+
+        let left = visible.origin.x + SIDE_GAP;
+        let right = visible.origin.x + visible.size.width - size.width - SIDE_GAP;
+        let wanted = match anchor_centre {
+            Some(centre) => centre - size.width / 2.0,
+            None => right,
+        };
+        // AppKit's origin is bottom left, so the top edge is the largest y.
+        let top = visible.origin.y + visible.size.height - TOP_GAP;
+
+        let handle = window.ns_window();
+        if handle.is_null() {
+            return;
+        }
+        let ns_window: &NSWindow = unsafe { &*(handle as *const NSWindow) };
+        ns_window.setFrameTopLeftPoint(NSPoint::new(wanted.clamp(left, right.max(left)), top));
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod place {
+    use tao::dpi::PhysicalPosition;
+    use tao::window::Window;
+
+    pub fn under_menu_bar(window: &Window, _anchor_centre: Option<f64>) {
+        let monitor = window
+            .current_monitor()
+            .or_else(|| window.primary_monitor());
+        let Some(monitor) = monitor else {
+            return;
+        };
+        let size = window.outer_size();
+        let x =
+            monitor.position().x as f64 + monitor.size().width as f64 - size.width as f64 - 16.0;
+        window.set_outer_position(PhysicalPosition::new(x, 32.0));
+    }
+}
+
 impl Panel {
     pub fn new<T: 'static>(
         target: &EventLoopWindowTarget<T>,
@@ -348,72 +414,23 @@ impl Panel {
         self.window.set_visible(false);
     }
 
-    /// Show the panel anchored under the tray icon.
-    ///
-    /// Tray rects and window sizes are both physical pixels, so everything here
-    /// stays in that space; only the gaps are scaled.
-    pub fn show_under(&self, x: f64, y: f64, width: f64, height: f64) {
-        let scale = self.window.scale_factor();
-        let size = self.window.outer_size();
-        let anchor_x = x + width / 2.0 - size.width as f64 / 2.0;
-        let anchor_y = y + height + 6.0 * scale;
-        self.place(anchor_x, anchor_y);
+    /// Show the panel anchored under the tray icon, centred on it.
+    pub fn show_under(&self, x: f64, _y: f64, width: f64, _height: f64) {
+        let centre_points = (x + width / 2.0) / self.window.scale_factor();
+        self.reveal(Some(centre_points));
     }
 
-    /// Show the panel near the top-right corner; used by the preview mode.
+    /// Show the panel at the top right; used by the preview mode.
     pub fn show_preview(&self) {
-        let scale = self.window.scale_factor();
-        let size = self.window.outer_size();
-        let monitor = self
-            .window
-            .current_monitor()
-            .or_else(|| self.window.primary_monitor());
-        let (mx, my, mw) = monitor
-            .map(|m| {
-                (
-                    m.position().x as f64,
-                    m.position().y as f64,
-                    m.size().width as f64,
-                )
-            })
-            .unwrap_or((0.0, 0.0, 1440.0));
-        self.place(
-            mx + mw - size.width as f64 - 16.0 * scale,
-            my + 28.0 * scale,
-        );
+        self.reveal(None);
     }
 
-    fn place(&self, x: f64, y: f64) {
-        let scale = self.window.scale_factor();
-        let margin = 8.0 * scale;
-        let size = self.window.outer_size();
-        let monitor = self
-            .window
-            .current_monitor()
-            .or_else(|| self.window.primary_monitor());
-        let x = match monitor {
-            Some(m) => {
-                let left = m.position().x as f64 + margin;
-                let right =
-                    m.position().x as f64 + m.size().width as f64 - size.width as f64 - margin;
-                x.clamp(left, right.max(left))
-            }
-            None => x,
-        };
-        // Order the window front first: macOS ignores a position set on a window
-        // that has never been shown, and constrains the frame when it appears.
+    /// Order the panel front and put it just under the menu bar.
+    fn reveal(&self, anchor_centre: Option<f64>) {
         self.window.set_visible(true);
-        self.window.set_outer_position(PhysicalPosition::new(x, y));
+        place::under_menu_bar(&self.window, anchor_centre);
         activate_app();
         self.window.set_focus();
-        eprintln!(
-            "netmeter: diagnostic wanted=({x:.0},{y:.0}) got={:?} size={:?} scale={scale} monitor={:?}",
-            self.window.outer_position(),
-            self.window.outer_size(),
-            self.window
-                .current_monitor()
-                .map(|m| (m.position(), m.size()))
-        );
     }
 
     pub fn push(&self, state: &PanelState) -> Result<()> {
