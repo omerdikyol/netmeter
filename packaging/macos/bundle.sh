@@ -20,9 +20,12 @@ if [ ! -f "$binary" ]; then
 fi
 
 rm -rf "$app"
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$binary" "$app/Contents/MacOS/netmeter"
 cp "$root/packaging/macos/Info.plist" "$app/Contents/Info.plist"
+if [ -f "$root/assets/NetMeter.icns" ]; then
+    cp "$root/assets/NetMeter.icns" "$app/Contents/Resources/NetMeter.icns"
+fi
 chmod +x "$app/Contents/MacOS/netmeter"
 
 echo "bundled $app"

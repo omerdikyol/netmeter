@@ -1,5 +1,11 @@
 name: CI
 
+# macOS only, for now: the panel renders in the system webview through `wry`,
+# which needs a GTK loop initialised on Linux that this app does not set up yet,
+# and Windows has never been exercised at all. Claiming those platforms in CI
+# without integrating them would just be a green badge that means nothing.
+# `crates/netmeter-core` itself is portable.
+
 on:
   push:
     branches: [main]
@@ -10,12 +16,8 @@ env:
 
 jobs:
   test:
-    name: test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: test (macOS)
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -25,13 +27,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install Linux tray dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
-
       - name: Format
         run: cargo fmt --all --check
 
@@ -40,3 +35,9 @@ jobs:
 
       - name: Test
         run: cargo test --all --all-features
+
+      # Building the bundle catches packaging mistakes that the library tests do not.
+      - name: Build and assemble the app
+        run: |
+          cargo build --release
+          packaging/macos/bundle.sh

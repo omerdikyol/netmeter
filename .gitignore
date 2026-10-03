@@ -4,3 +4,6 @@
 *.db-wal
 *.db-shm
 .DS_Store
+
+# Screenshots taken while working; the ones the README uses live in docs/.
+/*.png

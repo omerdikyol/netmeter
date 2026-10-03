@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS universal
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build both architectures
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+
+      - name: Assemble a universal app
+        run: |
+          lipo -create \
+            target/aarch64-apple-darwin/release/netmeter \
+            target/x86_64-apple-darwin/release/netmeter \
+            -output target/netmeter-universal
+          packaging/macos/bundle.sh target/netmeter-universal
+
+      # No-ops (and says so) until the signing secrets below are configured.
+      - name: Sign and notarize
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: packaging/macos/sign.sh
+
+      - name: Package
+        run: |
+          cd dist
+          ditto -c -k --keepParent NetMeter.app NetMeter-macos-universal.zip
+          shasum -a 256 NetMeter-macos-universal.zip
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/NetMeter-macos-universal.zip
+          generate_release_notes: true
