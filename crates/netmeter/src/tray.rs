@@ -5,12 +5,13 @@ use crate::icon_text::IconRenderer;
 use crate::instance;
 use crate::menu::{TrayMenu, ID_OPEN, ID_QUIT};
 use crate::menu_icon;
-use crate::panel::{Panel, PanelMessage, PanelState};
+use crate::notify;
+use crate::panel::{Panel, PanelMessage, PanelState, SettingsRequest};
 use anyhow::{Context, Result};
 use netmeter_core::config::{Config, MenuBarMode};
-use netmeter_core::format::format_compact;
+use netmeter_core::format::{format_bytes, format_compact};
 use netmeter_core::model::Rate;
-use netmeter_core::stats::Range;
+use netmeter_core::stats::{self, Range};
 use netmeter_core::Tracker;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -26,6 +27,8 @@ const ICON_FONT_PX: f32 = 12.0;
 const PREVIEW_ENV: &str = "NETMETER_PREVIEW_PANEL";
 /// Also pop the range sheet open on launch, for UI work.
 const PREVIEW_SHEET_ENV: &str = "NETMETER_PREVIEW_SHEET";
+/// Open the settings view on launch, for UI work.
+const PREVIEW_SETTINGS_ENV: &str = "NETMETER_PREVIEW_SETTINGS";
 /// Show the panel this many milliseconds after launch (instead of immediately),
 /// so UI work can exercise the panel opening after the app has settled.
 const PREVIEW_DELAY_ENV: &str = "NETMETER_PREVIEW_DELAY_MS";
@@ -200,6 +203,81 @@ impl App {
                 self.push_rate();
             }
         }
+        if self.ticks % STATE_EVERY == 0 {
+            self.check_alerts();
+        }
+    }
+
+    /// Notify when the cycle crosses one of the configured thresholds.
+    fn check_alerts(&mut self) {
+        let plan = self.tracker.plan().clone();
+        if !plan.enabled || plan.cap_bytes == 0 {
+            return;
+        }
+        let used = match self.tracker.cycle_usage() {
+            Ok(traffic) => traffic.total(),
+            Err(err) => {
+                eprintln!("netmeter: {err:#}");
+                return;
+            }
+        };
+
+        let cycle = self.tracker.cycle_window_start();
+        let last = self.tracker.alert_state().unwrap_or(None);
+        let Some(level) = stats::alert_due(used, plan.cap_bytes, &plan.warn_at, cycle, last) else {
+            return;
+        };
+
+        let unit = self.tracker.config().general.unit;
+        notify::send(
+            if level >= 1.0 {
+                "Data cap reached"
+            } else {
+                "Approaching your data cap"
+            },
+            &format!(
+                "{} of {} used this cycle ({:.0}%).",
+                format_bytes(used, unit),
+                format_bytes(plan.cap_bytes, unit),
+                stats::cap_percent(used, plan.cap_bytes)
+            ),
+        );
+
+        if let Err(err) = self.tracker.record_alert(cycle, level) {
+            eprintln!("netmeter: {err:#}");
+        }
+    }
+
+    /// Persist settings from the panel and apply them without a restart.
+    fn apply_settings(&mut self, request: SettingsRequest) {
+        let mut config = self.tracker.config().clone();
+        config.plan.enabled = request.cap_bytes > 0;
+        config.plan.cap_bytes = request.cap_bytes;
+        config.plan.reset_day = request.reset_day.clamp(1, 31);
+        if !request.warn_at.is_empty() {
+            config.plan.warn_at = request.warn_at;
+        }
+        if let Some(cycle) = parse_setting(&request.cycle) {
+            config.plan.cycle = cycle;
+        }
+        if let Some(mode) = parse_setting(&request.menu_bar) {
+            config.general.menu_bar = mode;
+        }
+        if let Some(unit) = parse_setting(&request.unit) {
+            config.general.unit = unit;
+        }
+
+        if let Err(err) = config.save() {
+            eprintln!("netmeter: could not save settings: {err:#}");
+        }
+        self.mode = config.general.menu_bar;
+        self.tracker.set_config(config);
+        // Force the title to redraw, including going back to the glyph.
+        self.last_icon_label = None;
+        if self.mode == MenuBarMode::Icon {
+            apply_icon(&self.tray, menu_icon::activity_icon()).ok();
+        }
+        self.push_state();
     }
 
     fn push_rate(&mut self) {
@@ -291,6 +369,10 @@ impl App {
                 }
                 false
             }
+            Ok(PanelMessage::Save(request)) => {
+                self.apply_settings(request);
+                false
+            }
             Ok(PanelMessage::Hide) => {
                 self.panel.hide();
                 false
@@ -309,6 +391,11 @@ impl App {
             eprintln!("netmeter: failed to flush usage on exit: {err:#}");
         }
     }
+}
+
+/// Parse a config enum value the way the config file spells it, e.g. "monthly".
+fn parse_setting<T: serde::de::DeserializeOwned>(value: &str) -> Option<T> {
+    serde_json::from_str(&format!("\"{value}\"")).ok()
 }
 
 /// Apply a new icon, preserving the macOS template flag.
@@ -368,7 +455,13 @@ pub fn run() -> Result<()> {
     let mut tracker_slot = Some(Tracker::open(config.clone())?);
     let mut app: Option<App> = None;
     let mut next_tick = Instant::now();
-    let reveal_sheet = std::env::var(PREVIEW_SHEET_ENV).is_ok();
+    let reveal = if std::env::var(PREVIEW_SHEET_ENV).is_ok() {
+        Some("sheet")
+    } else if std::env::var(PREVIEW_SETTINGS_ENV).is_ok() {
+        Some("settings")
+    } else {
+        None
+    };
 
     event_loop.run_return(|event, target, control_flow| {
         match event {
@@ -376,7 +469,7 @@ pub fn run() -> Result<()> {
             Event::NewEvents(StartCause::Init) => {
                 if let Some(tracker) = tracker_slot.take() {
                     let built = ipc_proxy.take().map(|proxy| {
-                        Panel::new(target, reveal_sheet, move |message| {
+                        Panel::new(target, reveal, move |message| {
                             let _ = proxy.send_event(UserEvent::Ipc(message));
                         })
                         .and_then(|panel| App::new(config.clone(), tracker, panel))

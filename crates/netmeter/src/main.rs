@@ -4,6 +4,7 @@ mod icon_text;
 mod instance;
 mod menu;
 mod menu_icon;
+mod notify;
 mod panel;
 mod tray;
 

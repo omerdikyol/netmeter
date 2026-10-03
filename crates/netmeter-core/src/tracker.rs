@@ -98,6 +98,31 @@ impl Tracker {
         self.sampler.current_bucket()
     }
 
+    /// Start of the current billing cycle, as unix seconds.
+    pub fn cycle_window_start(&self) -> i64 {
+        stats::cycle_start(Local::now(), &self.config.plan).timestamp()
+    }
+
+    /// Highest alert level already reported for a cycle: `(cycle_start, level)`.
+    pub fn alert_state(&self) -> Result<Option<(i64, f64)>> {
+        let cycle = self.store.meta_get("alert_cycle")?;
+        let level = self.store.meta_get("alert_level")?;
+        let cycle = cycle.and_then(|value| value.parse::<i64>().ok());
+        let level = level.and_then(|value| value.parse::<f64>().ok());
+        Ok(cycle.zip(level))
+    }
+
+    pub fn record_alert(&self, cycle_start: i64, level: f64) -> Result<()> {
+        self.store
+            .meta_set("alert_cycle", &cycle_start.to_string())?;
+        self.store.meta_set("alert_level", &level.to_string())
+    }
+
+    /// Swap in a config the user just saved.
+    pub fn set_config(&mut self, config: Config) {
+        self.config = config;
+    }
+
     pub fn plan(&self) -> &Plan {
         &self.config.plan
     }

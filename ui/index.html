@@ -228,15 +228,98 @@
   /* ---------- footer ---------- */
   footer {
     display: flex; justify-content: space-between; align-items: center;
+    gap: 10px;
     border-top: 1px solid var(--line); padding-top: 7px;
     font-size: 10.5px; color: var(--fg-faint);
     font-variant-numeric: tabular-nums;
   }
+  #note { margin-right: auto; }
   footer button {
     appearance: none; border: 0; background: transparent; color: var(--fg-dim);
     font: inherit; font-size: 10.5px; cursor: default; padding: 0;
   }
   footer button:hover { color: var(--fg); }
+
+  /* ---------- settings ---------- */
+  .settings {
+    position: absolute; inset: 0; z-index: 8;
+    display: flex; flex-direction: column; gap: 14px;
+    padding: 12px 14px 11px;
+    background: rgba(22, 22, 25, 0.99);
+    border-radius: 14px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.13s ease;
+    overflow-y: auto;
+  }
+  .settings::-webkit-scrollbar { width: 0; }
+  .settings.open { opacity: 1; pointer-events: auto; }
+
+  .settings-head {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em;
+    margin-bottom: -4px;
+  }
+  #settings-back {
+    appearance: none; border: 0; background: transparent;
+    color: var(--rx); font: inherit; font-size: 18px; line-height: 1;
+    padding: 0 2px 3px 0; cursor: default;
+  }
+
+  .group {
+    display: flex; flex-direction: column; gap: 8px;
+    background: var(--card); border-radius: 10px; padding: 9px 10px;
+  }
+  .group-title {
+    font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--fg-faint);
+  }
+  .group-note { font-size: 10px; color: var(--fg-faint); line-height: 1.45; }
+
+  .settings .seg {
+    background: rgba(0, 0, 0, 0.25); border-radius: 8px; padding: 2px; gap: 2px;
+  }
+  .settings .seg button { flex: 1; padding: 5px 0; font-size: 11px; }
+  .settings .seg button.on { background: rgba(255, 255, 255, 0.16); color: var(--fg); }
+  .settings .chips .chip { background: rgba(0, 0, 0, 0.25); }
+  .settings .chips .chip.on { background: var(--rx); color: #06121f; font-weight: 600; }
+  .seg-tight { flex: none; }
+  .seg-tight button { padding: 5px 9px; }
+
+  .cap-row { display: flex; align-items: center; gap: 8px; }
+  .cap-row input {
+    flex: 1; min-width: 0;
+    appearance: none; border: 0; border-radius: 8px;
+    background: rgba(0, 0, 0, 0.28); color: var(--fg);
+    font: inherit; font-size: 17px; font-weight: 600; letter-spacing: -0.02em;
+    padding: 7px 10px; font-variant-numeric: tabular-nums;
+  }
+  .cap-row input::placeholder { font-size: 12px; font-weight: 400; color: var(--fg-faint); }
+
+  .row-inline { display: flex; align-items: center; gap: 8px; }
+  .row-inline > span { font-size: 10.5px; color: var(--fg-dim); flex: none; }
+  .row-inline input {
+    width: 52px; flex: none; text-align: center;
+    appearance: none; border: 0; border-radius: 7px;
+    background: rgba(0, 0, 0, 0.28); color: var(--fg);
+    font: inherit; font-size: 11.5px; padding: 5px 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .settings input:focus { outline: 1px solid var(--rx); outline-offset: -1px; }
+
+  .settings-actions {
+    display: flex; gap: 8px; margin-top: auto; padding-top: 11px;
+    border-top: 1px solid var(--line);
+  }
+  .settings-actions button {
+    flex: 1; appearance: none; border: 0; border-radius: 8px;
+    font: inherit; font-size: 11.5px; font-weight: 600;
+    padding: 8px 0; cursor: default;
+  }
+  #settings-cancel { background: var(--card); color: var(--fg-dim); }
+  #settings-cancel:hover { color: var(--fg); }
+  #settings-save { background: var(--rx); color: #06121f; }
+  #settings-save:hover { filter: brightness(1.08); }
+  .settings-foot-note { font-size: 10px; color: var(--fg-faint); text-align: center; }
 
   /* ---------- light appearance ---------- */
   @media (prefers-color-scheme: light) {
@@ -252,6 +335,13 @@
       --grid: rgba(0, 0, 0, 0.1);
     }
     #app { background: rgba(250, 250, 252, 0.62); }
+    .settings { background: rgba(252, 252, 253, 0.99); }
+    .settings .seg { background: rgba(0, 0, 0, 0.05); }
+    .settings .seg button.on { background: rgba(0, 0, 0, 0.1); }
+    .settings .chips .chip { background: rgba(0, 0, 0, 0.05); }
+    .cap-row input, .row-inline input { background: rgba(0, 0, 0, 0.05); }
+    #settings-save { color: #fff; }
+    .chip.on { color: #fff; }
     .sheet {
       background: rgba(252, 252, 253, 0.98);
       border-color: rgba(0, 0, 0, 0.1);
@@ -334,15 +424,76 @@
 
   <footer>
     <span id="note">Drag the chart to zoom</span>
+    <button id="settings-btn">Settings</button>
     <button id="quit">Quit</button>
   </footer>
+
+  <div class="settings" id="settings">
+    <div class="settings-head">
+      <button id="settings-back" aria-label="Back">&#8249;</button>
+      <span>Settings</span>
+    </div>
+
+    <div class="group">
+      <div class="group-title">Data cap</div>
+      <div class="cap-row">
+        <input type="number" id="cap" min="0" step="0.5" placeholder="no cap">
+        <div class="seg seg-tight" id="cap-unit-seg">
+          <button data-v="GB">GB</button>
+          <button data-v="MB">MB</button>
+        </div>
+      </div>
+      <div class="group-note" id="cap-usage"></div>
+      <div class="row-inline">
+        <span>Resets</span>
+        <div class="seg seg-tight" id="cycle-seg">
+          <button data-v="monthly">Monthly</button>
+          <button data-v="weekly">Weekly</button>
+        </div>
+        <input type="number" id="reset-day" min="1" max="31" step="1" title="day of the month">
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">Alerts</div>
+      <div class="chips" id="warn-chips"></div>
+      <div class="group-note">A desktop notification each time the cycle reaches one of these.</div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">Menu bar</div>
+      <div class="seg" id="menu-seg">
+        <button data-v="icon">Icon</button>
+        <button data-v="rate">Rate</button>
+        <button data-v="total">Total</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">Units</div>
+      <div class="seg" id="unit-seg">
+        <button data-v="auto">Auto</button>
+        <button data-v="binary">Binary</button>
+        <button data-v="decimal">Decimal</button>
+      </div>
+    </div>
+
+    <div class="settings-actions">
+      <button id="settings-cancel">Cancel</button>
+      <button id="settings-save">Save</button>
+    </div>
+    <div class="settings-foot-note" id="settings-msg">Leave the cap empty for no cap.</div>
+  </div>
 </div>
 
 <script>
 (function () {
   "use strict";
 
-  var UNITS = ["B", "KB", "MB", "GB", "TB", "PB"];
+  var DECIMAL_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"];
+  var BINARY_UNITS = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  var UNITS = DECIMAL_UNITS.slice();
+  var BASE = 1000;
   var CHIPS = [
     { key: "1h", label: "1H" }, { key: "6h", label: "6H" },
     { key: "12h", label: "12H" }, { key: "24h", label: "24H" },
@@ -368,12 +519,18 @@
     };
   }
   var THEME = themeColors();
+  /// Dev aid: "sheet" or "settings" opens that view once the first state lands.
+  var REVEAL_PENDING = window.__netmeterReveal || "";
 
   /* ---------- formatting ---------- */
   function split(value) {
     var i = 0; value = Math.max(0, value);
-    while (value >= 1000 && i < UNITS.length - 1) { value /= 1000; i++; }
+    while (value >= BASE && i < UNITS.length - 1) { value /= BASE; i++; }
     return [value, i];
+  }
+  function applyUnit(unit) {
+    if (unit === "binary") { BASE = 1024; UNITS = BINARY_UNITS; }
+    else { BASE = 1000; UNITS = DECIMAL_UNITS; }
   }
   function bytes(v) {
     var p = split(v), n = p[1] === 0 ? String(Math.round(p[0])) : p[0].toFixed(p[0] < 10 ? 2 : 1);
@@ -488,7 +645,13 @@
   el("quit").addEventListener("click", function () { post({ type: "quit" }); });
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") { return; }
-    if (sheetOpen) { setSheet(false); } else { post({ type: "hide" }); }
+    if (el("settings").classList.contains("open")) {
+      el("settings").classList.remove("open");
+    } else if (sheetOpen) {
+      setSheet(false);
+    } else {
+      post({ type: "hide" });
+    }
   });
 
   var modes = el("modes");
@@ -672,6 +835,121 @@
     });
   }
 
+  /* ---------- settings ---------- */
+  var WARN_LEVELS = [0.5, 0.8, 0.9, 1.0];
+  var warnChips = el("warn-chips");
+
+  WARN_LEVELS.forEach(function (level) {
+    var b = document.createElement("button");
+    b.className = "chip";
+    b.dataset.v = level;
+    b.textContent = (level * 100) + "%";
+    b.addEventListener("click", function () { b.classList.toggle("on"); });
+    warnChips.appendChild(b);
+  });
+
+  function segValue(id) {
+    var on = el(id).querySelector("button.on");
+    return on ? on.dataset.v : "";
+  }
+  function setSeg(id, value) {
+    Array.prototype.forEach.call(el(id).children, function (b) {
+      b.classList.toggle("on", b.dataset.v === value);
+    });
+  }
+  function wireSeg(id, onPick) {
+    el(id).addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (!b) { return; }
+      setSeg(id, b.dataset.v);
+      if (onPick) { onPick(b.dataset.v); }
+    });
+  }
+  function setWarn(levels) {
+    Array.prototype.forEach.call(warnChips.children, function (b) {
+      b.classList.toggle("on", levels.indexOf(parseFloat(b.dataset.v)) >= 0);
+    });
+  }
+  function getWarn() {
+    var out = [];
+    Array.prototype.forEach.call(warnChips.children, function (b) {
+      if (b.classList.contains("on")) { out.push(parseFloat(b.dataset.v)); }
+    });
+    return out;
+  }
+
+  var capUnit = "GB";
+  function factor(unit) { return unit === "GB" ? 1e9 : 1e6; }
+
+  wireSeg("cycle-seg", function (value) {
+    el("reset-day").style.display = value === "weekly" ? "none" : "";
+  });
+  wireSeg("menu-seg");
+  wireSeg("unit-seg", function (value) {
+    applyUnit(value);
+    if (state) { render(state); }
+  });
+  wireSeg("cap-unit-seg", function (value) {
+    var raw = parseFloat(el("cap").value);
+    if (raw && value !== capUnit) {
+      el("cap").value = String(+(raw * factor(capUnit) / factor(value)).toFixed(2));
+    }
+    capUnit = value;
+  });
+
+  function capNote(cap) {
+    var used = state && state.plan ? state.plan.used || 0 : 0;
+    el("cap-usage").textContent = cap
+      ? bytes(used) + " used this cycle"
+      : "No cap set, so nothing is tracked against a limit.";
+  }
+  el("cap").addEventListener("input", function () {
+    var raw = parseFloat(el("cap").value);
+    capNote(raw > 0 ? raw * factor(capUnit) : 0);
+  });
+
+  function openSettings() {
+    if (!state) { return; }
+    setSheet(false);
+    var plan = state.plan;
+    var cap = plan.cap || 0;
+    capUnit = cap && cap < 1e9 ? "MB" : "GB";
+    el("cap").value = cap ? String(+(cap / factor(capUnit)).toFixed(2)) : "";
+    setSeg("cap-unit-seg", capUnit);
+    setSeg("cycle-seg", plan.cycle);
+    el("reset-day").value = plan.resetDay;
+    el("reset-day").style.display = plan.cycle === "weekly" ? "none" : "";
+    setWarn(plan.warnAt && plan.warnAt.length ? plan.warnAt : [0.8, 1.0]);
+    setSeg("menu-seg", state.menuBar);
+    setSeg("unit-seg", state.unit);
+    capNote(cap);
+    el("settings-msg").textContent = "Leave the cap empty for no cap.";
+    el("settings").classList.add("open");
+  }
+
+  el("settings-btn").addEventListener("click", openSettings);
+  el("settings-back").addEventListener("click", function () {
+    el("settings").classList.remove("open");
+  });
+  el("settings-cancel").addEventListener("click", function () {
+    el("settings").classList.remove("open");
+  });
+  el("settings-save").addEventListener("click", function () {
+    var raw = parseFloat(el("cap").value);
+    var cap = !raw || raw <= 0 ? 0 : Math.round(raw * factor(capUnit));
+    post({
+      type: "save",
+      capBytes: cap,
+      cycle: segValue("cycle-seg") || "monthly",
+      resetDay: parseInt(el("reset-day").value, 10) || 1,
+      warnAt: getWarn(),
+      menuBar: segValue("menu-seg") || "icon",
+      unit: segValue("unit-seg") || "auto"
+    });
+    el("settings-msg").textContent = "Saved.";
+    setTimeout(function () { el("settings").classList.remove("open"); }, 450);
+  });
+
   /* ---------- main render ---------- */
   function renderRate(r) {
     var rx = rateParts(r.rx), tx = rateParts(r.tx);
@@ -683,6 +961,7 @@
 
   function render(s) {
     state = s;
+    applyUnit(s.unit);
 
     renderRate(s.rate);
 
@@ -729,6 +1008,12 @@
     } else {
       el("note").textContent = "Drag the chart to zoom";
     }
+
+    if (REVEAL_PENDING) {
+      var reveal = REVEAL_PENDING;
+      REVEAL_PENDING = "";
+      if (reveal === "settings") { openSettings(); } else { setSheet(true); }
+    }
   }
 
   window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", function () {
@@ -738,7 +1023,6 @@
 
   window.netmeter = { update: render, rate: renderRate };
   post({ type: "ready" });
-  if (window.__netmeterRevealSheet) { setSheet(true); }
 })();
 </script>
 </body>

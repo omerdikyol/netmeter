@@ -8,7 +8,7 @@
 use crate::apps::AppUsage;
 use anyhow::{Context, Result};
 use chrono::Local;
-use netmeter_core::config::{Cycle, Plan};
+use netmeter_core::config::{Cycle, MenuBarMode, Plan, UnitSystem};
 use netmeter_core::model::{Rate, Traffic};
 use netmeter_core::stats::{self, Range};
 use netmeter_core::Tracker;
@@ -37,8 +37,23 @@ pub enum PanelMessage {
         from: i64,
         to: i64,
     },
+    /// The user saved the settings view.
+    Save(SettingsRequest),
     Hide,
     Quit,
+}
+
+/// What the settings view hands back. Empty or zero values mean "leave alone",
+/// except `cap_bytes`, where zero means "no cap".
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsRequest {
+    pub cap_bytes: u64,
+    pub cycle: String,
+    pub reset_day: u32,
+    pub warn_at: Vec<f64>,
+    pub menu_bar: String,
+    pub unit: String,
 }
 
 #[derive(Serialize)]
@@ -80,6 +95,7 @@ struct PlanDto {
     percent: f64,
     cycle: &'static str,
     reset_day: u32,
+    warn_at: Vec<f64>,
 }
 
 #[derive(Serialize)]
@@ -113,6 +129,9 @@ pub struct PanelState {
     apps: Vec<AppUsage>,
     apps_supported: bool,
     apps_error: Option<String>,
+    /// Current settings, so the settings view opens on the real values.
+    unit: &'static str,
+    menu_bar: &'static str,
 }
 
 /// Bucket width that keeps the chart at a readable number of points.
@@ -225,11 +244,22 @@ impl PanelState {
                     Cycle::Monthly => "monthly",
                 },
                 reset_day: plan.reset_day,
+                warn_at: plan.warn_at.clone(),
             },
             interfaces,
             apps,
             apps_supported: apps_error.is_none(),
             apps_error,
+            unit: match tracker.config().general.unit {
+                UnitSystem::Auto => "auto",
+                UnitSystem::Binary => "binary",
+                UnitSystem::Decimal => "decimal",
+            },
+            menu_bar: match tracker.config().general.menu_bar {
+                MenuBarMode::Icon => "icon",
+                MenuBarMode::Rate => "rate",
+                MenuBarMode::Total => "total",
+            },
         })
     }
 }
@@ -263,7 +293,7 @@ fn activate_app() {}
 impl Panel {
     pub fn new<T: 'static>(
         target: &EventLoopWindowTarget<T>,
-        reveal_sheet: bool,
+        reveal: Option<&str>,
         on_message: impl Fn(String) + 'static,
     ) -> Result<Self> {
         let window = WindowBuilder::new()
@@ -296,10 +326,11 @@ impl Panel {
             // Without this the webview is suspended the moment the app is not
             // frontmost, and the panel is drawn blank the next time it is shown.
             .with_background_throttling(BackgroundThrottlingPolicy::Disabled);
-        if reveal_sheet {
-            // Runs before the page's own scripts, so the UI can open the range
-            // sheet on load. Only used by the preview mode.
-            builder = builder.with_initialization_script("window.__netmeterRevealSheet = true;");
+        if let Some(what) = reveal {
+            // Runs before the page's own scripts; the page opens that view once
+            // it has state to show. Only used by the preview mode.
+            builder =
+                builder.with_initialization_script(format!("window.__netmeterReveal = {what:?};"));
         }
         let webview = builder
             .with_ipc_handler(move |request| on_message(request.body().clone()))
@@ -369,10 +400,20 @@ impl Panel {
             }
             None => x,
         };
-        self.window.set_outer_position(PhysicalPosition::new(x, y));
+        // Order the window front first: macOS ignores a position set on a window
+        // that has never been shown, and constrains the frame when it appears.
         self.window.set_visible(true);
+        self.window.set_outer_position(PhysicalPosition::new(x, y));
         activate_app();
         self.window.set_focus();
+        eprintln!(
+            "netmeter: diagnostic wanted=({x:.0},{y:.0}) got={:?} size={:?} scale={scale} monitor={:?}",
+            self.window.outer_position(),
+            self.window.outer_size(),
+            self.window
+                .current_monitor()
+                .map(|m| (m.position(), m.size()))
+        );
     }
 
     pub fn push(&self, state: &PanelState) -> Result<()> {

@@ -203,6 +203,24 @@ pub fn alarm_level(used: u64, cap: u64, warn_at: &[f64]) -> Option<f64> {
         })
 }
 
+/// The alert level that should fire now, if any.
+///
+/// `last` is the highest level already reported for `cycle_start`, so a level
+/// never fires twice in the same cycle and a new cycle starts fresh.
+pub fn alert_due(
+    used: u64,
+    cap: u64,
+    warn_at: &[f64],
+    cycle_start: i64,
+    last: Option<(i64, f64)>,
+) -> Option<f64> {
+    let level = alarm_level(used, cap, warn_at)?;
+    match last {
+        Some((cycle, reported)) if cycle == cycle_start && reported >= level => None,
+        _ => Some(level),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,5 +321,37 @@ mod tests {
         assert_eq!(alarm_level(850, 1000, &warn), Some(0.8));
         assert_eq!(alarm_level(1_050, 1000, &warn), Some(1.0));
         assert_eq!(alarm_level(500, 0, &warn), None);
+    }
+
+    #[test]
+    fn alert_fires_once_per_level_per_cycle() {
+        let warn = [0.8, 1.0];
+        let cycle = 1_000_000;
+
+        // Nothing yet.
+        assert_eq!(alert_due(500, 1000, &warn, cycle, None), None);
+        // Crossing 80% fires.
+        assert_eq!(alert_due(850, 1000, &warn, cycle, None), Some(0.8));
+        // Still inside the same band: already reported.
+        assert_eq!(alert_due(900, 1000, &warn, cycle, Some((cycle, 0.8))), None);
+        // Crossing the cap fires the next level up.
+        assert_eq!(
+            alert_due(1_100, 1000, &warn, cycle, Some((cycle, 0.8))),
+            Some(1.0)
+        );
+        // Nothing new after the top level.
+        assert_eq!(
+            alert_due(1_500, 1000, &warn, cycle, Some((cycle, 1.0))),
+            None
+        );
+    }
+
+    #[test]
+    fn a_new_cycle_alerts_again() {
+        let warn = [0.8, 1.0];
+        assert_eq!(
+            alert_due(850, 1000, &warn, 2_000, Some((1_000, 1.0))),
+            Some(0.8)
+        );
     }
 }
