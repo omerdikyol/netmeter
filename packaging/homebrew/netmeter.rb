@@ -1,9 +1,6 @@
 cask "netmeter" do
   version "0.1.0"
-  # Filled in from the release output: `cargo build --release` then
-  # `shasum -a 256 dist/NetMeter-macos-universal.zip` (the release workflow
-  # prints the same value).
-  sha256 "PLACEHOLDER_SHA256"
+  sha256 "c6be43b45e6ddf2c24f3987b2ad893f5e729987983107067cdd98c60432555a8"
 
   url "https://github.com/omerdikyol/netmeter/releases/download/v#{version}/NetMeter-macos-universal.zip"
   name "NetMeter"

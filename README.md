@@ -1,17 +1,35 @@
-# NetMeter
+<p align="center">
+  <img src="docs/assets/icon.svg" width="112" alt="NetMeter">
+</p>
 
-A small, quiet network usage monitor for the macOS menu bar. Left-click the icon
-for a live graph, the total over any time range you like, and how much of your
-data plan you have burnt through.
+<h1 align="center">NetMeter</h1>
 
-Built for the phone-hotspot case: tethering on a capped mobile plan, wanting to
-know what you have used before the carrier tells you.
+<p align="center">
+  A small, quiet network usage monitor for the macOS menu bar.<br>
+  Live rate, any time range, per-app usage — and how much of your data plan is gone.
+</p>
 
-![platform: macOS](https://img.shields.io/badge/platform-macOS%2013%2B-blue)
-![license: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green)
-[![CI](https://github.com/omerdikyol/netmeter/actions/workflows/ci.yml/badge.svg)](https://github.com/omerdikyol/netmeter/actions/workflows/ci.yml)
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#configuration">Configuration</a> ·
+  <a href="#the-command-line">CLI</a> ·
+  <a href="#uninstall">Uninstall</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
-![The NetMeter panel](docs/screenshots/panel.png)
+<p align="center">
+  <a href="https://github.com/omerdikyol/netmeter/releases"><img src="https://img.shields.io/github/v/release/omerdikyol/netmeter?label=release&color=4c8dff" alt="Latest release"></a>
+  <a href="https://github.com/omerdikyol/netmeter/releases"><img src="https://img.shields.io/github/downloads/omerdikyol/netmeter/total?color=4c8dff" alt="Downloads"></a>
+  <a href="https://github.com/omerdikyol/netmeter/actions/workflows/ci.yml"><img src="https://github.com/omerdikyol/netmeter/actions/workflows/ci.yml/badge.svg?branch=main&event=push" alt="CI status"></a>
+  <img src="https://img.shields.io/badge/macOS-13%2B-black?logo=apple&logoColor=white" alt="macOS 13 and newer">
+  <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="MIT or Apache-2.0">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/panel.png" width="330" alt="The NetMeter panel: live rate, graph, totals and per-app usage">
+</p>
 
 ## Why another one of these
 
@@ -22,8 +40,8 @@ traffic. Two things are different here:
   panel is about how much of it is gone and when it renews — with notifications
   as you cross the thresholds you picked.
 - **It needs no privileges.** No Accessibility permission, no root, no kernel
-  extension, no network filter. It reads the same per-interface counters
-  Activity Monitor does, and `nettop` for per-app numbers.
+  extension, no network filter. It reads the same per-interface counters Activity
+  Monitor does, and `nettop` for per-app numbers.
 
 ## Features
 
@@ -89,7 +107,7 @@ the always-visible section.
 
 | Choosing a time range | Settings |
 | :---: | :---: |
-| ![The range picker](docs/screenshots/range.png) | ![Settings](docs/screenshots/settings.png) |
+| <img src="docs/screenshots/range.png" width="300" alt="The range picker: quick chips, and a custom From and To"> | <img src="docs/screenshots/settings.png" width="300" alt="Settings: data cap, alerts, menu bar and units"> |
 
 ## Configuration
 
@@ -179,8 +197,9 @@ packaging/macos        Info.plist, bundle, signing and icon scripts
 packaging/homebrew     the cask
 ```
 
-Contributions are welcome. `cargo test` and `cargo clippy --all-targets --
--D warnings` should both be clean before a pull request.
+Contributions are welcome. `cargo test` and
+`cargo clippy --all-targets -- -D warnings` should both be clean before a pull
+request.
 
 ## Roadmap
 
@@ -188,7 +207,7 @@ Contributions are welcome. `cargo test` and `cargo clippy --all-targets --
 - [x] Menu bar app and the panel
 - [x] Per-interface and per-app views, any time range
 - [x] Data cap, reset cycle and threshold notifications
-- [x] Signed-app packaging, Homebrew cask and a generated icon
+- [x] Universal packaging, Homebrew cask and a generated icon
 - [ ] Signed and notarized releases
 - [ ] Linux and Windows front ends
 
