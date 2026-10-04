@@ -32,9 +32,16 @@ if [ ! -e "$target" ]; then
 fi
 
 key_file=""
+created_keychain=""
 cleanup() {
     rm -f certificate.p12 notarize.zip
     if [ -n "$key_file" ]; then rm -f "$key_file"; fi
+    # Must go: signing the app and then the disk image means this script runs
+    # twice in one release, and the second run would find the name taken. It
+    # also keeps the private key off the machine afterwards.
+    if [ -n "$created_keychain" ]; then
+        security delete-keychain "$created_keychain" 2>/dev/null || true
+    fi
 }
 trap cleanup EXIT
 
@@ -47,13 +54,32 @@ if [ -n "${MACOS_CERTIFICATE:-}" ]; then
     keychain=netmeter-signing.keychain
     keychain_password=$(openssl rand -hex 16)
     security create-keychain -p "$keychain_password" "$keychain"
+    created_keychain="$keychain"
     security set-keychain-settings -lut 3600 "$keychain"
     security unlock-keychain -p "$keychain_password" "$keychain"
-    printf '%s' "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
-    security import certificate.p12 -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" \
-        -T /usr/bin/codesign -T /usr/bin/security
-    security set-key-partition-list -S apple-tool:,apple:,codesign: \
-        -s -k "$keychain_password" "$keychain" >/dev/null
+    if ! printf '%s' "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12; then
+        echo "error: MACOS_CERTIFICATE is not valid base64." >&2
+        echo "It has to be the output of: base64 -i Certificates.p12" >&2
+        exit 1
+    fi
+    if [ ! -s certificate.p12 ]; then
+        echo "error: MACOS_CERTIFICATE decoded to nothing." >&2
+        exit 1
+    fi
+    if ! security import certificate.p12 -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" \
+        -T /usr/bin/codesign -T /usr/bin/security; then
+        echo "error: the certificate would not import." >&2
+        echo "Either MACOS_CERTIFICATE is not the base64 of the .p12 itself, or" >&2
+        echo "MACOS_CERTIFICATE_PASSWORD is not the password you set when you" >&2
+        echo "exported it from Keychain Access." >&2
+        exit 1
+    fi
+    if ! security set-key-partition-list -S apple-tool:,apple:,codesign: \
+        -s -k "$keychain_password" "$keychain" >/dev/null; then
+        echo "error: could not set the key partition list, so codesign would not" >&2
+        echo "be allowed to use the imported key." >&2
+        exit 1
+    fi
     security list-keychains -d user -s "$keychain" $(security list-keychains -d user | sed 's/"//g')
 
     # Fail here, clearly, rather than with a confusing "no identity found" later.
@@ -109,6 +135,19 @@ elif [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_
         --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" \
         --wait
 else
+    # A certificate with no notary credentials is the dangerous case: the build
+    # looks signed, and Gatekeeper still refuses it on every other machine. That
+    # is worth failing loudly, because an empty secret in CI produces exactly
+    # this and is otherwise invisible.
+    if [ -n "${MACOS_CERTIFICATE:-}" ] && [ "${ALLOW_UNNOTARIZED:-}" != "1" ]; then
+        echo "error: a certificate is set, but no notary credentials are." >&2
+        echo "Signing alone is not enough — Gatekeeper rejects an unnotarized" >&2
+        echo "build, so this would publish something nobody can open." >&2
+        echo "In CI an empty secret is the usual cause, so check that APPLE_ID," >&2
+        echo "APPLE_TEAM_ID and APPLE_APP_PASSWORD are all present and non-empty." >&2
+        echo "Set ALLOW_UNNOTARIZED=1 to publish a signed but unnotarized build." >&2
+        exit 1
+    fi
     echo "--- not notarizing ---"
     echo "No notary credentials, so $target is signed but not notarized."
     echo "Gatekeeper will still refuse it on another machine."
