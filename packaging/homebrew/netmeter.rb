@@ -1,6 +1,6 @@
 cask "netmeter" do
-  version "0.1.0"
-  sha256 "76a6c7ca9edb983d7dfd0b75eb24e3a26ac98fe88eed23555df53c197036ef8c"
+  version "0.1.1"
+  sha256 "d87fb704344b91997266dda991ac0280839184e5b2e3f667b088491dd564265a"
 
   url "https://github.com/omerdikyol/netmeter/releases/download/v#{version}/NetMeter-macos-universal.dmg"
   name "NetMeter"

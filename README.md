@@ -70,11 +70,10 @@ Or download `NetMeter-macos-universal.dmg` from
 [Releases](https://github.com/omerdikyol/netmeter/releases), open it, and drag
 NetMeter into Applications. There is a `.zip` too, if you prefer.
 
-> **Releases are unsigned for now**, so macOS refuses the first launch of a
-> downloaded copy. Right-click the app and choose **Open**, or clear the flag:
-> `xattr -dr com.apple.quarantine /Applications/NetMeter.app`
-> Everything needed to sign and notarize is already in place and switches on as
-> soon as the credentials are set — see [SIGNING.md](SIGNING.md).
+> Releases are signed with a Developer ID certificate and notarized by Apple, so
+> the app opens normally — no Gatekeeper workaround. Builds up to and including
+> 0.1.0 were unsigned: if you have one of those, right-click it and choose
+> **Open**. [SIGNING.md](SIGNING.md) covers how the signing works.
 
 From source:
 

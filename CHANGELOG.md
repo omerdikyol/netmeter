@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.1
+
+Skip the Gatekeeper workaround.
+
+- Releases are signed with a Developer ID certificate and notarized by Apple, so
+  the app opens normally instead of needing right-click > Open. Builds up to and
+  including 0.1.0 were unsigned.
+- A release is now checked with `spctl` — the same question Gatekeeper asks —
+  before it is published, so one macOS would refuse cannot be shipped.
+- Fixed the signing step failing on the second artifact of a release, which
+  produces an exit code that says nothing about the cause.
+
 ## 0.1.0
 
 First public release. macOS only.
