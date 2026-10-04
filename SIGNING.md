@@ -91,6 +91,18 @@ cargo build --release
 packaging/macos/release.sh
 ```
 
+For a local test the quickest route is a **keychain profile**, which keeps the
+credentials out of your shell and your history:
+
+```sh
+xcrun notarytool store-credentials netmeter    # asks for your Apple ID and an app-specific password
+NOTARY_PROFILE=netmeter packaging/macos/release.sh
+```
+
+`release.sh` finishes by asking Gatekeeper directly (`spctl`) and validating both
+staples, and fails the build if either says no — so a release cannot ship a
+signature that macOS will refuse.
+
 ## Checking it worked
 
 `spctl` is the real test — it asks the same question Gatekeeper will:

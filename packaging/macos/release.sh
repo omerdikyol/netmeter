@@ -33,5 +33,15 @@ ditto -c -k --keepParent "$app" "$zip"
 echo
 echo "--- artifacts ---"
 ls -lh "$dmg" "$zip" | awk '{print $9, $5}'
+
+# Gatekeeper's own answer is the one that matters, so fail the release rather
+# than shipping something it will refuse. Only meaningful once signed.
+if [ -n "${MACOS_CERTIFICATE:-}" ]; then
+    echo "--- checking what Gatekeeper will say ---"
+    spctl -a -vvv -t install "$app"
+    xcrun stapler validate "$app"
+    xcrun stapler validate "$dmg"
+fi
+
 echo "--- hashes (the cask needs the dmg one) ---"
 shasum -a 256 "$dmg" "$zip"

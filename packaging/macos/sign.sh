@@ -11,10 +11,12 @@
 #   MACOS_CERTIFICATE           base64 of a "Developer ID Application" .p12
 #   MACOS_CERTIFICATE_PASSWORD  the password used when exporting that .p12
 #
-# Credentials for notarization (one of these two):
-#   NOTARY_KEY_P8   contents of an App Store Connect .p8 key  (preferred: no
-#   NOTARY_KEY_ID   its key id                                 personal password
-#   NOTARY_ISSUER_ID  the issuer id                            and no 2FA)
+# Credentials for notarization (one of these three, in this order of preference):
+#   NOTARY_PROFILE  a keychain profile made by `notarytool store-credentials`.
+#                   Most convenient locally, since nothing goes in the env.
+#   NOTARY_KEY_P8   contents of an App Store Connect .p8 key   (best for CI: no
+#   NOTARY_KEY_ID   its key id                                  personal password
+#   NOTARY_ISSUER_ID  the issuer id                             and no 2FA)
 # or
 #   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
 #
@@ -82,7 +84,10 @@ if [ -n "${NOTARY_KEY_P8:-}" ] && [ -z "${NOTARY_KEY:-}" ]; then
     NOTARY_KEY="$key_file"
 fi
 
-if [ -n "${NOTARY_KEY:-}" ] && [ -n "${NOTARY_KEY_ID:-}" ] && [ -n "${NOTARY_ISSUER_ID:-}" ]; then
+if [ -n "${NOTARY_PROFILE:-}" ]; then
+    echo "--- notarizing with the '$NOTARY_PROFILE' keychain profile (this waits for Apple) ---"
+    xcrun notarytool submit "$submit" --keychain-profile "$NOTARY_PROFILE" --wait
+elif [ -n "${NOTARY_KEY:-}" ] && [ -n "${NOTARY_KEY_ID:-}" ] && [ -n "${NOTARY_ISSUER_ID:-}" ]; then
     echo "--- notarizing with an API key (this waits for Apple) ---"
     xcrun notarytool submit "$submit" \
         --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" \
