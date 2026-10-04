@@ -63,6 +63,7 @@ Homebrew:
 
 ```sh
 brew tap omerdikyol/netmeter
+brew trust omerdikyol/netmeter   # Homebrew 7 asks for third-party taps to be trusted
 brew install --cask netmeter
 ```
 
@@ -208,7 +209,7 @@ crates/netmeter-core   sampling, storage, stats, config (no UI; unit tested)
 crates/netmeter        tray app, panel host, per-app sampler, CLI
 ui/index.html          the panel itself (HTML/CSS/JS, no build step)
 packaging/macos        Info.plist, bundle, signing and icon scripts
-packaging/homebrew     the cask
+packaging/homebrew     the cask; copy it to the homebrew-netmeter tap on release
 ```
 
 Contributions are welcome. `cargo test` and

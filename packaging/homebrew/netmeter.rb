@@ -8,7 +8,7 @@ cask "netmeter" do
   homepage "https://github.com/omerdikyol/netmeter"
 
   # Universal build: Apple silicon and Intel.
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   app "NetMeter.app"
 
