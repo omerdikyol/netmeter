@@ -25,33 +25,24 @@ jobs:
           cargo build --release --target aarch64-apple-darwin
           cargo build --release --target x86_64-apple-darwin
 
-      - name: Assemble a universal app
+      # Signs and notarizes when the secrets are present; otherwise explains
+      # what is missing and builds an unsigned release (see SIGNING.md).
+      - name: Package
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           lipo -create \
             target/aarch64-apple-darwin/release/netmeter \
             target/x86_64-apple-darwin/release/netmeter \
             -output target/netmeter-universal
-          packaging/macos/bundle.sh target/netmeter-universal
-
-      # No-ops (and says so) until the signing secrets below are configured.
-      - name: Sign and notarize
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        run: packaging/macos/sign.sh
-
-      - name: Package
-        run: |
-          cd dist
-          ditto -c -k --keepParent NetMeter.app NetMeter-macos-universal.zip
-          cd ..
-          packaging/macos/dmg.sh
-          echo "--- hashes ---"
-          shasum -a 256 dist/NetMeter-macos-universal.dmg
-          shasum -a 256 dist/NetMeter-macos-universal.zip
+          packaging/macos/release.sh target/netmeter-universal
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2

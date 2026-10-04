@@ -73,8 +73,8 @@ NetMeter into Applications. There is a `.zip` too, if you prefer.
 > **Releases are unsigned for now**, so macOS refuses the first launch of a
 > downloaded copy. Right-click the app and choose **Open**, or clear the flag:
 > `xattr -dr com.apple.quarantine /Applications/NetMeter.app`
-> Signing and notarization are wired into the release workflow and switch on as
-> soon as the credentials are set.
+> Everything needed to sign and notarize is already in place and switches on as
+> soon as the credentials are set — see [SIGNING.md](SIGNING.md).
 
 From source:
 

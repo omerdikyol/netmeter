@@ -1,68 +1,104 @@
 #!/bin/sh
-# Sign and notarize the app bundle, when the credentials are available.
+# Sign, notarize and staple a target — a .app or a .dmg.
 #
-# Usage: packaging/macos/sign.sh [path/to/NetMeter.app]
+# Usage: packaging/macos/sign.sh [path]
+#   default path: dist/NetMeter.app
 #
-# Environment:
+# With no credentials this explains what is missing and exits 0, so an unsigned
+# release still builds and publishes.
+#
+# Credentials for signing (always needed):
 #   MACOS_CERTIFICATE           base64 of a "Developer ID Application" .p12
 #   MACOS_CERTIFICATE_PASSWORD  the password used when exporting that .p12
-#   APPLE_ID                    Apple account email, for notarization
-#   APPLE_TEAM_ID               team id, for notarization
-#   APPLE_APP_PASSWORD          an app-specific password, for notarization
 #
-# With MACOS_CERTIFICATE unset this prints what is missing and exits 0, so an
-# unsigned release still builds and publishes.
+# Credentials for notarization (one of these two):
+#   NOTARY_KEY_P8   contents of an App Store Connect .p8 key  (preferred: no
+#   NOTARY_KEY_ID   its key id                                 personal password
+#   NOTARY_ISSUER_ID  the issuer id                            and no 2FA)
+# or
+#   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
+#
+# See SIGNING.md for how to obtain each of these.
 set -eu
 
-app=${1:-dist/NetMeter.app}
+target=${1:-dist/NetMeter.app}
 identity="Developer ID Application"
 
-if [ ! -d "$app" ]; then
-    echo "error: no app bundle at $app" >&2
+if [ ! -e "$target" ]; then
+    echo "error: nothing to sign at $target" >&2
     exit 1
 fi
 
 if [ -z "${MACOS_CERTIFICATE:-}" ]; then
     echo "--- not signing ---"
-    echo "MACOS_CERTIFICATE is not set, so the app will be unsigned."
+    echo "MACOS_CERTIFICATE is not set, so $target is left unsigned."
     echo "Downloaders will have to right-click > Open the first time."
-    echo "To sign: create a 'Developer ID Application' certificate, export it as"
-    echo ".p12, base64 it, and set MACOS_CERTIFICATE / MACOS_CERTIFICATE_PASSWORD"
-    echo "plus APPLE_ID / APPLE_TEAM_ID / APPLE_APP_PASSWORD as repo secrets."
+    echo "packaging/macos/SIGNING.md explains how to turn this on."
     exit 0
 fi
 
+key_file=""
+cleanup() {
+    rm -f certificate.p12 notarize.zip
+    if [ -n "$key_file" ]; then rm -f "$key_file"; fi
+}
+trap cleanup EXIT
+
 echo "--- importing the certificate ---"
-keychain=build.keychain
+keychain=netmeter-signing.keychain
 keychain_password=$(openssl rand -hex 16)
 security create-keychain -p "$keychain_password" "$keychain"
 security set-keychain-settings -lut 3600 "$keychain"
 security unlock-keychain -p "$keychain_password" "$keychain"
-echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
-security import certificate.p12 -k "$keychain" \
-    -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+printf '%s' "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+security import certificate.p12 -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" \
+    -T /usr/bin/codesign -T /usr/bin/security
 security set-key-partition-list -S apple-tool:,apple:,codesign: \
     -s -k "$keychain_password" "$keychain" >/dev/null
-security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+security list-keychains -d user -s "$keychain" $(security list-keychains -d user | sed 's/"//g')
 
-echo "--- signing ---"
-codesign --force --deep --options runtime --timestamp \
-    --sign "$identity" "$app"
-codesign --verify --strict --verbose=2 "$app"
+# Fail here, clearly, rather than with a confusing "no identity found" later.
+if ! security find-identity -v -p codesigning "$keychain" | grep -q "$identity"; then
+    echo "error: no '$identity' identity after importing the certificate" >&2
+    security find-identity -v -p codesigning "$keychain" >&2 || true
+    exit 1
+fi
 
-if [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ] || [ -z "${APPLE_APP_PASSWORD:-}" ]; then
+echo "--- signing $target ---"
+# No --deep: it is deprecated for signing as of macOS 13, and this bundle has no
+# nested code for it to walk into anyway.
+codesign --force --options runtime --timestamp --sign "$identity" "$target"
+codesign --verify --strict --verbose=2 "$target"
+
+# notarytool takes a .dmg directly; anything else has to be zipped.
+case "$target" in
+    *.dmg) submit="$target" ;;
+    *)     submit="notarize.zip"; ditto -c -k --keepParent "$target" "$submit" ;;
+esac
+
+if [ -n "${NOTARY_KEY_P8:-}" ] && [ -z "${NOTARY_KEY:-}" ]; then
+    key_file=$(mktemp -t authkey).p8
+    printf '%s' "$NOTARY_KEY_P8" > "$key_file"
+    NOTARY_KEY="$key_file"
+fi
+
+if [ -n "${NOTARY_KEY:-}" ] && [ -n "${NOTARY_KEY_ID:-}" ] && [ -n "${NOTARY_ISSUER_ID:-}" ]; then
+    echo "--- notarizing with an API key (this waits for Apple) ---"
+    xcrun notarytool submit "$submit" \
+        --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" \
+        --wait
+elif [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ]; then
+    echo "--- notarizing with an Apple ID (this waits for Apple) ---"
+    xcrun notarytool submit "$submit" \
+        --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" \
+        --wait
+else
     echo "--- not notarizing ---"
-    echo "Apple credentials are incomplete; the app is signed but not notarized."
+    echo "No notary credentials, so $target is signed but not notarized."
+    echo "Gatekeeper will still refuse it on another machine."
     exit 0
 fi
 
-echo "--- notarizing (this waits for Apple) ---"
-ditto -c -k --keepParent "$app" notarize.zip
-xcrun notarytool submit notarize.zip \
-    --apple-id "$APPLE_ID" \
-    --team-id "$APPLE_TEAM_ID" \
-    --password "$APPLE_APP_PASSWORD" \
-    --wait
-xcrun stapler staple "$app"
-xcrun stapler validate "$app"
-echo "--- done: signed and notarized ---"
+xcrun stapler staple "$target"
+xcrun stapler validate "$target"
+echo "--- done: $target is signed and notarized ---"
