@@ -53,6 +53,8 @@ traffic. Two things are different here:
 | **Per app** | The busiest processes since launch, or per-interface totals for the selected range |
 | **Data cap** | Progress against your plan, a reset day, and threshold notifications |
 | **Menu bar** | A quiet activity glyph, or the live rate, or the cycle total — your choice |
+| **Looks how you like** | Light or dark, or follow the system, with a panel opacity slider |
+| **Starts with you** | Optional launch at login, so the totals have no gaps |
 | **Private** | A SQLite file on your machine. No accounts, nothing uploaded |
 
 ## Install
@@ -118,8 +120,13 @@ run. `netmeter config` prints the paths and the current contents.
 ```toml
 [general]
 sample_interval_ms = 1000
+launch_at_login = false
 menu_bar = "icon"      # icon | rate | total
 unit = "auto"          # auto | binary | decimal
+
+[appearance]
+theme = "system"       # system | light | dark
+opacity = 0.72
 
 [plan]
 enabled = true
@@ -129,7 +136,9 @@ reset_day = 15
 warn_at = [0.8, 1.0]
 ```
 
-History is a SQLite file beside it, pruned to 90 days.
+History is a SQLite file beside it, pruned to 90 days. Note that NetMeter only
+samples while it is running, so the totals cover that time — the panel says since
+when.
 
 ## The command line
 
@@ -188,7 +197,12 @@ NETMETER_PREVIEW_PANEL=1 NETMETER_PREVIEW_DELAY_MS=4000 cargo run
 NETMETER_PREVIEW_SHEET=1 cargo run                 # with the range picker open
 NETMETER_PREVIEW_SETTINGS=1 cargo run              # on the settings screen
 NETMETER_KEEP_OPEN=1 cargo run                     # never dismiss on focus loss
+NETMETER_DEMO=1 cargo run                          # draw invented data, not yours
 ```
+
+`NETMETER_DEMO` is what the screenshots in this README were taken with: it makes
+the panel ignore the real state and draw a fixed, made-up dataset, and squares
+its corners at full opacity so a capture contains nothing but panel pixels.
 
 ```
 crates/netmeter-core   sampling, storage, stats, config (no UI; unit tested)

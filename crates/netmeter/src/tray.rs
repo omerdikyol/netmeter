@@ -30,6 +30,8 @@ const PREVIEW_ENV: &str = "NETMETER_PREVIEW_PANEL";
 const PREVIEW_SHEET_ENV: &str = "NETMETER_PREVIEW_SHEET";
 /// Open the settings view on launch, for UI work.
 const PREVIEW_SETTINGS_ENV: &str = "NETMETER_PREVIEW_SETTINGS";
+/// Draw a made-up dataset instead of real traffic; for documentation shots.
+const DEMO_ENV: &str = "NETMETER_DEMO";
 /// Show the panel this many milliseconds after launch (instead of immediately),
 /// so UI work can exercise the panel opening after the app has settled.
 const PREVIEW_DELAY_ENV: &str = "NETMETER_PREVIEW_DELAY_MS";
@@ -507,9 +509,15 @@ pub fn run() -> Result<()> {
             Event::NewEvents(StartCause::Init) => {
                 if let Some(tracker) = tracker_slot.take() {
                     let built = ipc_proxy.take().map(|proxy| {
-                        Panel::new(target, reveal, config.appearance.theme, move |message| {
-                            let _ = proxy.send_event(UserEvent::Ipc(message));
-                        })
+                        Panel::new(
+                            target,
+                            reveal,
+                            config.appearance.theme,
+                            std::env::var(DEMO_ENV).is_ok(),
+                            move |message| {
+                                let _ = proxy.send_event(UserEvent::Ipc(message));
+                            },
+                        )
                         .and_then(|panel| App::new(config.clone(), tracker, panel))
                     });
                     match built {

@@ -6,20 +6,57 @@
 <meta name="color-scheme" content="light dark">
 <title>NetMeter</title>
 <style>
+  /*
+    Design notes, since these are choices worth keeping:
+
+    - A type scale, not ad-hoc sizes: 9.5 / 10.5 / 11.5 / 16 / 19.
+    - Spacing in multiples of four. Section gaps (16) are twice row gaps (8),
+      so grouping reads from spacing rather than from boxes around everything.
+    - Borders are a last resort. One hairline separates sections; rows are
+      grouped by proximity. (Refactoring UI: "use fewer borders".)
+    - Colour is for meaning only: blue is download, orange is upload, and the
+      cap bar is the single accented element because the cap is the point of
+      the app. (Von Restorff / isolation effect.)
+    - Labels only where the control cannot speak for itself.
+  */
+
   :root {
     --rx: #4da3ff;
     --tx: #ff9f0a;
-    --fg: #f2f2f7;
-    --fg-dim: rgba(235, 235, 245, 0.55);
-    --fg-faint: rgba(235, 235, 245, 0.38);
-    --line: rgba(255, 255, 255, 0.08);
-    --card: rgba(255, 255, 255, 0.05);
-    --card-hi: rgba(255, 255, 255, 0.1);
-    --grid: rgba(255, 255, 255, 0.07);
-    /* RGB triplets, so the opacity setting can vary the alpha. */
-    --panel: 28, 28, 31;
-    --sheet: 22, 22, 25;
+    --danger: #ff6f66;
+
+    --fg: rgba(246, 246, 250, 0.98);
+    --fg-2: rgba(235, 235, 245, 0.6);
+    --fg-3: rgba(235, 235, 245, 0.33);
+
+    --sep: rgba(255, 255, 255, 0.07);
+    --fill: rgba(255, 255, 255, 0.055);
+    --fill-2: rgba(255, 255, 255, 0.11);
+    --grid: rgba(255, 255, 255, 0.06);
+
+    --panel: 26, 26, 29;
+    --sheet: 24, 24, 27;
     --panel-alpha: 0.72;
+
+    --radius: 13px;
+  }
+
+  :root[data-theme="light"] {
+    --rx: #0071e3;
+    --tx: #c26a00;
+    --danger: #d70015;
+
+    --fg: rgba(20, 20, 22, 0.98);
+    --fg-2: rgba(60, 60, 67, 0.62);
+    --fg-3: rgba(60, 60, 67, 0.42);
+
+    --sep: rgba(0, 0, 0, 0.08);
+    --fill: rgba(0, 0, 0, 0.045);
+    --fill-2: rgba(0, 0, 0, 0.085);
+    --grid: rgba(0, 0, 0, 0.07);
+
+    --panel: 250, 250, 252;
+    --sheet: 252, 252, 253;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -29,7 +66,7 @@
     background: transparent;
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--fg);
     -webkit-font-smoothing: antialiased;
     user-select: none;
@@ -41,216 +78,220 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    padding: 12px 14px 10px;
-    gap: 8px;
+    padding: 14px 16px 10px;
+    gap: 14px;
     background: rgba(var(--panel), var(--panel-alpha));
-    border: 1px solid var(--line);
-    border-radius: 14px;
+    border: 1px solid var(--sep);
+    border-radius: var(--radius);
   }
 
-  /* ---------- header ---------- */
-  header { display: flex; align-items: flex-end; justify-content: space-between; }
-  .brand {
-    font-size: 10px; font-weight: 600; letter-spacing: 0.09em;
-    text-transform: uppercase; color: var(--fg-faint); padding-bottom: 3px;
-  }
-  .live { display: flex; gap: 16px; }
-  .live-item { display: flex; align-items: baseline; gap: 4px; }
-  .live-item .num {
-    font-size: 17px; font-weight: 600; letter-spacing: -0.02em;
+  /* ---------- live rate: the one thing that should shout ---------- */
+  header { display: flex; align-items: baseline; justify-content: space-between; }
+
+  .rate { display: flex; align-items: baseline; gap: 5px; }
+  .rate b {
+    font-size: 19px; font-weight: 600; letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
   }
-  .live-item .unit { font-size: 10px; font-weight: 500; color: var(--fg-dim); }
-  .live-item.down .arw { color: var(--rx); font-size: 12px; }
-  .live-item.up .arw { color: var(--tx); font-size: 12px; }
+  .rate .unit { font-size: 10px; color: var(--fg-2); font-weight: 500; }
+  .rate .arw { font-size: 12px; font-weight: 600; }
+  .down .arw { color: var(--rx); }
+  .up .arw { color: var(--tx); }
 
-  /* ---------- range button ---------- */
-  .rangebar { display: flex; align-items: center; gap: 6px; }
+  /* ---------- range ---------- */
+  .rangebar { display: flex; align-items: center; gap: 8px; }
+
+  #range-btn {
+    display: flex; align-items: center; gap: 5px; max-width: 200px;
+    appearance: none; border: 0; border-radius: 7px;
+    background: var(--fill); color: var(--fg);
+    font: inherit; font-size: 11.5px; font-weight: 500;
+    padding: 5px 9px; cursor: default;
+  }
+  #range-btn:hover, #range-btn.open { background: var(--fill-2); }
+  #range-btn .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #range-btn .chev { font-size: 9px; color: var(--fg-3); }
+
   #range-reset {
     display: none; appearance: none; border: 0; background: transparent;
     color: var(--rx); font: inherit; font-size: 10.5px; font-weight: 600;
-    padding: 3px 6px; border-radius: 6px; cursor: default;
+    padding: 3px 4px; border-radius: 6px; cursor: default;
   }
   #range-reset.show { display: block; }
-  #range-reset:hover { background: var(--card); }
-  #range-btn {
-    display: flex; align-items: center; gap: 5px;
-    appearance: none; border: 0; background: var(--card); color: var(--fg);
-    font: inherit; font-size: 11.5px; font-weight: 500;
-    padding: 5px 9px; border-radius: 7px; cursor: default;
-    max-width: 210px;
+  #range-reset:hover { background: var(--fill); }
+
+  .total {
+    margin-left: auto; font-size: 11.5px; color: var(--fg-2);
+    font-variant-numeric: tabular-nums;
   }
-  #range-btn:hover { background: var(--card-hi); }
-  #range-btn .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #range-btn .chev { color: var(--fg-faint); font-size: 9px; }
-  #range-btn.open { background: var(--card-hi); }
-  .range-total {
-    margin-left: auto;
-    font-size: 11px; color: var(--fg-dim); font-variant-numeric: tabular-nums;
+
+  /* ---------- chart ---------- */
+  .chart { position: relative; height: 122px; }
+  .chart svg { display: block; width: 100%; height: 122px; overflow: visible; }
+  .peak {
+    position: absolute; top: -3px; right: 0;
+    font-size: 9.5px; color: var(--fg-3); font-variant-numeric: tabular-nums;
   }
+  .axis-x {
+    display: flex; justify-content: space-between;
+    font-size: 9.5px; color: var(--fg-3);
+    font-variant-numeric: tabular-nums; padding-top: 2px;
+  }
+  .empty {
+    position: absolute; inset: 0; display: none;
+    flex-direction: column; gap: 3px;
+    align-items: center; justify-content: center; text-align: center;
+  }
+  .empty strong { font-size: 11.5px; font-weight: 500; color: var(--fg-2); }
+  .empty span { font-size: 10px; color: var(--fg-3); }
+  #sel {
+    position: absolute; top: 0; height: 122px; display: none;
+    background: rgba(77, 163, 255, 0.16);
+    border-left: 1px solid var(--rx); border-right: 1px solid var(--rx);
+  }
+  #tip {
+    position: absolute; display: none; pointer-events: none; z-index: 4;
+    padding: 5px 8px; border-radius: 7px;
+    background: rgba(var(--sheet), 0.97);
+    border: 1px solid var(--fill-2);
+    font-size: 10px; line-height: 1.55; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  }
+  #tip b { font-weight: 600; }
+
+  /* ---------- totals ---------- */
+  .totals { display: flex; gap: 8px; }
+  .totals > div {
+    flex: 1; display: flex; flex-direction: column; gap: 2px;
+    background: var(--fill); border-radius: 9px; padding: 7px 10px;
+  }
+  .totals .k { font-size: 9.5px; color: var(--fg-3); }
+  .totals .v {
+    font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- cap: the accented element ---------- */
+  .cap { display: none; flex-direction: column; gap: 5px; }
+  .cap-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 10px; color: var(--fg-2); font-variant-numeric: tabular-nums;
+  }
+  .cap-head .pct { font-size: 11.5px; font-weight: 600; color: var(--rx); }
+  .cap-bar { height: 4px; border-radius: 2px; background: var(--fill-2); overflow: hidden; }
+  .cap-bar > div {
+    height: 100%; border-radius: 2px; width: 0;
+    background: var(--rx); transition: width 0.3s ease;
+  }
+  .cap.warn .cap-head .pct, .cap.warn .cap-head .used { color: var(--tx); }
+  .cap.warn .cap-bar > div { background: var(--tx); }
+  .cap.over .cap-head .pct, .cap.over .cap-head .used { color: var(--danger); }
+  .cap.over .cap-bar > div { background: var(--danger); }
+  .cap-foot { font-size: 9.5px; color: var(--fg-3); }
+
+  /* ---------- usage rows ---------- */
+  .listhead { display: flex; align-items: center; justify-content: space-between; }
+  .seg { display: flex; gap: 1px; background: var(--fill); border-radius: 7px; padding: 2px; }
+  .seg button {
+    appearance: none; border: 0; background: transparent; color: var(--fg-2);
+    font: inherit; font-size: 10.5px; font-weight: 500;
+    padding: 3px 8px; border-radius: 5px; cursor: default;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .seg button:hover { color: var(--fg); }
+  .seg button.on { background: var(--fill-2); color: var(--fg); }
+  .seg.off { opacity: 0.4; pointer-events: none; }
+  .seg-tight button { padding: 3px 7px; }
+
+  .rows {
+    flex: 1; min-height: 0; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 1px;
+    border-top: 1px solid var(--sep); padding-top: 8px;
+  }
+  .rows::-webkit-scrollbar { width: 0; }
+  .row {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
+    align-items: baseline; padding: 3px 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .row .name {
+    font-size: 11.5px; font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .row .rate { font-size: 10px; color: var(--fg-2); }
+  .row .total { font-size: 10px; color: var(--fg-3); min-width: 54px; text-align: right; }
+  .none { font-size: 10.5px; color: var(--fg-3); padding: 2px 0; line-height: 1.5; }
+
+  /* ---------- footer ---------- */
+  footer {
+    display: flex; align-items: center; gap: 10px;
+    border-top: 1px solid var(--sep); padding-top: 8px;
+    font-size: 9.5px; color: var(--fg-3);
+  }
+  footer #note { margin-right: auto; }
+  footer button {
+    appearance: none; border: 0; background: transparent; color: var(--fg-2);
+    font: inherit; font-size: 10.5px; cursor: default; padding: 0;
+  }
+  footer button:hover { color: var(--fg); }
 
   /* ---------- range sheet ---------- */
   .sheet {
-    position: absolute; left: 10px; right: 10px; top: 72px;
-    display: flex; flex-direction: column; gap: 8px;
-    padding: 10px; z-index: 6;
-    background: rgba(var(--sheet), calc(var(--panel-alpha) * 0.25 + 0.7));
-    border: 1px solid rgba(255, 255, 255, 0.11);
-    border-radius: 11px;
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+    position: absolute; left: 10px; right: 10px; top: 52px; z-index: 6;
+    display: flex; flex-direction: column; gap: 10px; padding: 12px;
+    background: rgba(var(--sheet), calc(var(--panel-alpha) * 0.25 + 0.72));
+    border: 1px solid var(--fill-2); border-radius: 11px;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.38);
     opacity: 0; transform: translateY(-6px) scale(0.985);
     pointer-events: none;
     transition: opacity 0.13s ease, transform 0.13s ease;
   }
   .sheet.open { opacity: 1; transform: none; pointer-events: auto; }
   .sheet-title {
-    font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em;
-    text-transform: uppercase; color: var(--fg-faint);
+    font-size: 9.5px; font-weight: 600; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--fg-3);
   }
   .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
   .chip {
-    appearance: none; border: 0; background: var(--card); color: var(--fg-dim);
+    appearance: none; border: 0; background: var(--fill); color: var(--fg-2);
     font: inherit; font-size: 11px; font-weight: 500;
     padding: 6px 0; border-radius: 6px; cursor: default;
   }
-  .chip:hover { color: var(--fg); background: var(--card-hi); }
+  .chip:hover { color: var(--fg); background: var(--fill-2); }
   .chip.on { background: var(--rx); color: #06121f; font-weight: 600; }
-  .sheet hr { border: 0; border-top: 1px solid var(--line); }
+  :root[data-theme="light"] .chip.on { color: #fff; }
+  .sheet hr { border: 0; border-top: 1px solid var(--sep); }
   .field { display: flex; align-items: center; gap: 6px; }
-  .field > span {
-    width: 32px; font-size: 10px; color: var(--fg-dim); flex: none;
-  }
+  .field > span { width: 30px; flex: none; font-size: 10px; color: var(--fg-2); }
   .field input {
-    appearance: none; border: 0; background: rgba(0, 0, 0, 0.3);
-    color: var(--fg); font: inherit; font-size: 11px;
-    padding: 5px 6px; border-radius: 6px; min-width: 0;
-    font-variant-numeric: tabular-nums;
+    appearance: none; border: 0; border-radius: 6px;
+    background: var(--fill); color: var(--fg);
+    font: inherit; font-size: 11px; padding: 5px 6px;
+    font-variant-numeric: tabular-nums; min-width: 0;
   }
   .field input[type="date"] { flex: 1; }
-  .field input[type="time"] { width: 82px; flex: none; }
+  .field input[type="time"] { width: 80px; flex: none; }
   .field input:focus { outline: 1px solid var(--rx); outline-offset: -1px; }
-  .field input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.45; }
+  .field input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.4; }
+  :root[data-theme="light"] .field input::-webkit-calendar-picker-indicator { filter: none; }
   #apply {
     appearance: none; border: 0; border-radius: 7px;
     background: var(--rx); color: #06121f;
     font: inherit; font-size: 11.5px; font-weight: 600;
     padding: 7px 0; cursor: default;
   }
-  #apply:hover { filter: brightness(1.08); }
-  .sheet-msg {
-    font-size: 10px; color: var(--fg-faint); text-align: center; min-height: 13px;
-  }
-  .sheet-msg.bad { color: #ff6f66; }
-
-  /* ---------- chart ---------- */
-  .chart { position: relative; height: 108px; }
-  .chart svg { display: block; width: 100%; height: 108px; overflow: visible; }
-  .axis-x {
-    display: flex; justify-content: space-between; font-size: 10px;
-    color: var(--fg-faint); font-variant-numeric: tabular-nums;
-  }
-  .peak {
-    position: absolute; top: -1px; right: 0; font-size: 10px;
-    color: var(--fg-faint); font-variant-numeric: tabular-nums;
-  }
-  .empty {
-    position: absolute; inset: 0; display: none; align-items: center;
-    justify-content: center; font-size: 11px; color: var(--fg-faint);
-  }
-  #sel {
-    position: absolute; top: 0; height: 108px; display: none;
-    background: rgba(77, 163, 255, 0.18);
-    border-left: 1px solid var(--rx); border-right: 1px solid var(--rx);
-  }
-  #tip {
-    position: absolute; display: none; pointer-events: none; padding: 5px 7px;
-    background: rgba(20, 20, 22, 0.94); border: 1px solid var(--line);
-    border-radius: 7px; font-size: 10.5px; line-height: 1.5;
-    font-variant-numeric: tabular-nums; white-space: nowrap;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
-  }
-  #tip b { font-weight: 600; }
-
-  /* ---------- totals ---------- */
-  .cards { display: flex; gap: 8px; }
-  .card { flex: 1; background: var(--card); border-radius: 9px; padding: 6px 9px; }
-  .card-label { font-size: 10px; color: var(--fg-dim); margin-bottom: 1px; }
-  .card-value {
-    font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* ---------- cap ---------- */
-  .cap { display: none; flex-direction: column; gap: 4px; }
-  .cap-head {
-    display: flex; justify-content: space-between;
-    font-size: 10.5px; font-variant-numeric: tabular-nums;
-  }
-  .cap-head .used { color: var(--fg-dim); }
-  .cap-head .pct { font-weight: 600; }
-  .cap-bar { height: 5px; border-radius: 3px; background: var(--card-hi); overflow: hidden; }
-  .cap-bar > div {
-    height: 100%; border-radius: 3px;
-    background: linear-gradient(90deg, var(--rx), #7bb8ff);
-    transition: width 0.3s ease;
-  }
-  .cap.warn .cap-bar > div { background: linear-gradient(90deg, var(--tx), #ffbf5c); }
-  .cap.over .cap-bar > div { background: linear-gradient(90deg, #ff453a, #ff6f66); }
-  .cap.warn .cap-head .pct { color: var(--tx); }
-  .cap.over .cap-head .pct { color: #ff6f66; }
-  .cap-foot { font-size: 10px; color: var(--fg-faint); }
-
-  /* ---------- rows ---------- */
-  .section-head { display: flex; align-items: center; justify-content: space-between; }
-  .section-title {
-    font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase;
-    color: var(--fg-faint); font-weight: 600;
-  }
-  .hint { font-size: 10px; color: var(--fg-faint); }
-  .seg { display: flex; gap: 2px; }
-  .seg button {
-    appearance: none; border: 0; background: transparent; color: var(--fg-faint);
-    font: inherit; font-size: 10px; font-weight: 500; padding: 2px 7px;
-    border-radius: 5px; cursor: default;
-  }
-  .seg button:hover { color: var(--fg-dim); }
-  .seg button.on { background: var(--card-hi); color: var(--fg); }
-
-  .rows { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-  .rows::-webkit-scrollbar { width: 0; }
-  .row {
-    display: grid; grid-template-columns: 1fr auto auto; gap: 8px;
-    align-items: baseline; padding: 3px 6px; border-radius: 6px;
-    font-variant-numeric: tabular-nums;
-  }
-  .row:hover { background: var(--card); }
-  .row .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .row .rate { font-size: 10.5px; color: var(--fg-dim); }
-  .row .total { font-size: 11.5px; color: var(--fg-dim); }
-  .none { font-size: 11px; color: var(--fg-faint); padding: 4px 6px; line-height: 1.45; }
-
-  /* ---------- footer ---------- */
-  footer {
-    display: flex; justify-content: space-between; align-items: center;
-    gap: 10px;
-    border-top: 1px solid var(--line); padding-top: 7px;
-    font-size: 10.5px; color: var(--fg-faint);
-    font-variant-numeric: tabular-nums;
-  }
-  #note { margin-right: auto; }
-  footer button {
-    appearance: none; border: 0; background: transparent; color: var(--fg-dim);
-    font: inherit; font-size: 10.5px; cursor: default; padding: 0;
-  }
-  footer button:hover { color: var(--fg); }
+  :root[data-theme="light"] #apply { color: #fff; }
+  .sheet-msg { font-size: 9.5px; color: var(--fg-3); text-align: center; min-height: 12px; }
+  .sheet-msg.bad { color: var(--danger); }
 
   /* ---------- settings ---------- */
   .settings {
     position: absolute; inset: 0; z-index: 8;
-    display: flex; flex-direction: column; gap: 14px;
-    padding: 12px 14px 11px;
-    background: rgba(var(--sheet), calc(var(--panel-alpha) * 0.2 + 0.78));
-    border-radius: 14px;
+    display: flex; flex-direction: column; gap: 16px;
+    padding: 12px 16px 10px;
+    background: rgba(var(--sheet), calc(var(--panel-alpha) * 0.2 + 0.8));
+    border-radius: var(--radius);
     opacity: 0; pointer-events: none;
     transition: opacity 0.13s ease;
     overflow-y: auto;
@@ -259,63 +300,95 @@
   .settings.open { opacity: 1; pointer-events: auto; }
 
   .settings-head {
-    display: flex; align-items: center; gap: 4px;
+    display: flex; align-items: center; gap: 5px;
     font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em;
-    margin-bottom: -4px;
   }
   #settings-back {
-    appearance: none; border: 0; background: transparent;
-    color: var(--rx); font: inherit; font-size: 18px; line-height: 1;
-    padding: 0 2px 3px 0; cursor: default;
+    appearance: none; border: 0; background: transparent; color: var(--rx);
+    font: inherit; font-size: 18px; line-height: 1; padding: 0 2px 3px 0;
+    cursor: default;
+  }
+  #settings-version {
+    margin-left: auto; font-size: 9.5px; font-weight: 400; color: var(--fg-3);
   }
 
-  .group {
-    display: flex; flex-direction: column; gap: 8px;
-    background: var(--card); border-radius: 10px; padding: 9px 10px;
-  }
+  /* Groups are separated by a heading and space, not by a box. */
+  .group { display: flex; flex-direction: column; }
   .group-title {
-    font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em;
-    text-transform: uppercase; color: var(--fg-faint);
+    font-size: 9.5px; font-weight: 600; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--fg-3); margin-bottom: 8px;
   }
-  .group-note { font-size: 10px; color: var(--fg-faint); line-height: 1.45; }
-
-  .settings .seg {
-    background: rgba(0, 0, 0, 0.25); border-radius: 8px; padding: 2px; gap: 2px;
+  .row-note {
+    font-size: 10px; color: var(--fg-3); line-height: 1.5; padding-top: 5px;
   }
-  .settings .seg button { flex: 1; padding: 5px 0; font-size: 11px; }
-  .settings .seg button.on { background: rgba(255, 255, 255, 0.16); color: var(--fg); }
-  .settings .chips .chip { background: rgba(0, 0, 0, 0.25); }
-  .settings .chips .chip.on { background: var(--rx); color: #06121f; font-weight: 600; }
-  .seg-tight { flex: none; }
-  .seg-tight button { padding: 5px 9px; }
 
-  .cap-row { display: flex; align-items: center; gap: 8px; }
-  .cap-row input {
+  .line {
+    display: flex; align-items: center; gap: 8px;
+    min-height: 26px; padding: 3px 0;
+  }
+  .line > .k { font-size: 11px; color: var(--fg); flex: 1; }
+  .line + .line { border-top: 1px solid var(--sep); }
+
+  .cap-input { display: flex; align-items: center; gap: 8px; padding: 2px 0 4px; }
+  .cap-input input {
     flex: 1; min-width: 0;
     appearance: none; border: 0; border-radius: 8px;
-    background: rgba(0, 0, 0, 0.28); color: var(--fg);
+    background: var(--fill); color: var(--fg);
     font: inherit; font-size: 17px; font-weight: 600; letter-spacing: -0.02em;
     padding: 7px 10px; font-variant-numeric: tabular-nums;
   }
-  .cap-row input::placeholder { font-size: 12px; font-weight: 400; color: var(--fg-faint); }
-
-  .row-inline { display: flex; align-items: center; gap: 8px; }
-  .row-inline > span { font-size: 10.5px; color: var(--fg-dim); flex: none; }
-  .row-inline input {
+  .cap-input input::placeholder { font-size: 12px; font-weight: 400; color: var(--fg-3); }
+  .line input[type="number"] {
     width: 52px; flex: none; text-align: center;
-    appearance: none; border: 0; border-radius: 7px;
-    background: rgba(0, 0, 0, 0.28); color: var(--fg);
-    font: inherit; font-size: 11.5px; padding: 5px 6px;
+    appearance: none; border: 0; border-radius: 6px;
+    background: var(--fill); color: var(--fg);
+    font: inherit; font-size: 11.5px; padding: 4px 6px;
     font-variant-numeric: tabular-nums;
   }
   .settings input:focus { outline: 1px solid var(--rx); outline-offset: -1px; }
 
+  .line input[type="range"] {
+    flex: 1; appearance: none; height: 4px; border-radius: 2px;
+    background: var(--fill-2); outline: none; min-width: 0;
+  }
+  .line input[type="range"]::-webkit-slider-thumb {
+    appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--fg); border: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  .line .value {
+    width: 34px; flex: none; text-align: right; font-size: 10.5px;
+    color: var(--fg-2); font-variant-numeric: tabular-nums;
+  }
+
+  /* A switch is clearer than Off | On for a single boolean. */
+  .switch {
+    appearance: none; border: 0; position: relative; flex: none;
+    width: 36px; height: 21px; border-radius: 11px;
+    background: var(--fill-2); cursor: default;
+    transition: background 0.15s ease;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 17px; height: 17px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: transform 0.15s ease;
+  }
+  .switch.on { background: var(--rx); }
+  .switch.on::after { transform: translateX(15px); }
+
+  .textbtn {
+    appearance: none; border: 0; background: transparent; color: var(--fg-2);
+    font: inherit; font-size: 10.5px; text-align: left;
+    padding: 6px 0 0; cursor: default; align-self: flex-start;
+  }
+  .textbtn:hover { color: var(--fg); }
+  .textbtn.armed { color: var(--danger); font-weight: 600; }
+
   .settings-actions {
-    /* Pinned to the bottom of the scrolling sheet, so Save is always reachable. */
-    position: sticky; bottom: -11px; z-index: 1;
-    display: flex; gap: 8px; margin-top: auto;
-    padding: 10px 0 14px;
-    border-top: 1px solid var(--line);
+    position: sticky; bottom: -10px; z-index: 1;
+    display: flex; gap: 8px; margin-top: auto; padding: 10px 0 13px;
+    border-top: 1px solid var(--sep);
     background: rgba(var(--sheet), 0.97);
   }
   .settings-actions button {
@@ -323,78 +396,34 @@
     font: inherit; font-size: 11.5px; font-weight: 600;
     padding: 8px 0; cursor: default;
   }
-  #settings-cancel { background: var(--card); color: var(--fg-dim); }
+  #settings-cancel { background: var(--fill); color: var(--fg-2); }
   #settings-cancel:hover { color: var(--fg); }
   #settings-save { background: var(--rx); color: #06121f; }
-  #settings-save:hover { filter: brightness(1.08); }
-  .settings-foot-note { font-size: 10px; color: var(--fg-faint); text-align: center; }
-  .settings-version { margin-left: auto; font-size: 10px; font-weight: 400; color: var(--fg-faint); }
-  .row-inline input[type="range"] {
-    flex: 1; appearance: none; height: 4px; border-radius: 2px;
-    background: rgba(0, 0, 0, 0.25); outline: none; min-width: 0;
-  }
-  .row-inline input[type="range"]::-webkit-slider-thumb {
-    appearance: none; width: 13px; height: 13px; border-radius: 50%;
-    background: var(--fg); border: 0;
-  }
-  .row-inline .value {
-    width: 34px; flex: none; text-align: right; font-size: 10.5px;
-    color: var(--fg-dim); font-variant-numeric: tabular-nums;
-  }
-  .textbtn {
-    appearance: none; border: 0; background: transparent; color: var(--fg-dim);
-    font: inherit; font-size: 10.5px; text-align: left; padding: 1px 0;
-    cursor: default; align-self: flex-start;
-  }
-  .textbtn:hover { color: var(--fg); }
-  .textbtn.armed { color: #ff6f66; font-weight: 600; }
-  .seg.off { opacity: 0.4; pointer-events: none; }
-
-  /* ---------- light appearance ---------- */
-  /* Driven by the theme setting, not the media query, so it can be overridden. */
-  :root[data-theme="light"] {
-    --rx: #0071e3;
-    --tx: #c26a00;
-    --fg: #1c1c1e;
-    --fg-dim: rgba(60, 60, 67, 0.62);
-    --fg-faint: rgba(60, 60, 67, 0.5);
-    --line: rgba(0, 0, 0, 0.1);
-    --card: rgba(0, 0, 0, 0.045);
-    --card-hi: rgba(0, 0, 0, 0.085);
-    --grid: rgba(0, 0, 0, 0.1);
-    --panel: 250, 250, 252;
-    --sheet: 252, 252, 253;
-  }
-  :root[data-theme="light"] .sheet { border-color: rgba(0, 0, 0, 0.1); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18); }
-  :root[data-theme="light"] .settings .seg { background: rgba(0, 0, 0, 0.05); }
-  :root[data-theme="light"] .settings .seg button.on { background: rgba(0, 0, 0, 0.1); }
-  :root[data-theme="light"] .settings .chips .chip { background: rgba(0, 0, 0, 0.05); }
-  :root[data-theme="light"] .cap-row input,
-  :root[data-theme="light"] .row-inline input { background: rgba(0, 0, 0, 0.05); }
-  :root[data-theme="light"] .field input { background: rgba(0, 0, 0, 0.05); }
-  :root[data-theme="light"] .field input::-webkit-calendar-picker-indicator { filter: none; }
-  :root[data-theme="light"] #tip { background: rgba(255, 255, 255, 0.97); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16); }
-  :root[data-theme="light"] .cap-bar { background: rgba(0, 0, 0, 0.1); }
-  :root[data-theme="light"] #sel { background: rgba(0, 113, 227, 0.14); }
-  :root[data-theme="light"] .chip.on { color: #fff; }
   :root[data-theme="light"] #settings-save { color: #fff; }
-  :root[data-theme="light"] .row-inline input[type="range"] { background: rgba(0, 0, 0, 0.12); }
+  #settings-save:hover { filter: brightness(1.08); }
+  .settings-foot-note { font-size: 9.5px; color: var(--fg-3); text-align: center; }
+
+  /*
+    Demo mode squares the corners and goes fully opaque, so a screenshot taken
+    of the panel contains nothing but panel pixels — no desktop bleeding in
+    around the rounded edge, and no real traffic in the data.
+  */
+  :root[data-demo="true"] #app,
+  :root[data-demo="true"] .settings,
+  :root[data-demo="true"] .sheet { border-radius: 0; }
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <div class="brand">NetMeter</div>
-    <div class="live">
-      <div class="live-item down"><span class="arw">&#8595;</span><span class="num" id="rate-rx">0</span><span class="unit" id="unit-rx">B/s</span></div>
-      <div class="live-item up"><span class="arw">&#8593;</span><span class="num" id="rate-tx">0</span><span class="unit" id="unit-tx">B/s</span></div>
-    </div>
+    <span class="rate down"><span class="arw">&#8595;</span><b id="rate-rx">0</b><span class="unit" id="unit-rx">B/s</span></span>
+    <span class="rate up"><span class="arw">&#8593;</span><b id="rate-tx">0</b><span class="unit" id="unit-tx">B/s</span></span>
   </header>
 
   <div class="rangebar">
     <button id="range-btn"><span class="label" id="range-label">Today</span><span class="chev">&#9662;</span></button>
     <button id="range-reset">Reset</button>
-    <span class="range-total" id="range-total"></span>
+    <span class="total" id="range-total"></span>
   </div>
 
   <div class="sheet" id="sheet">
@@ -413,41 +442,43 @@
       <input type="time" id="to-time" value="23:59">
     </div>
     <button id="apply">Apply range</button>
-    <div class="sheet-msg" id="sheet-msg">Tip: you can drag across the chart to zoom.</div>
+    <div class="sheet-msg" id="sheet-msg">Tip: drag across the chart to zoom.</div>
   </div>
 
   <section class="chart" id="chart">
-    <svg id="graph" viewBox="0 0 300 108" preserveAspectRatio="none"></svg>
+    <svg id="graph" viewBox="0 0 300 122" preserveAspectRatio="none"></svg>
     <div id="sel"></div>
-    <div id="empty" class="empty">Not enough data yet</div>
+    <div id="empty" class="empty">
+      <strong>No data for this window yet</strong>
+      <span>The graph fills in as NetMeter runs.</span>
+    </div>
     <div id="tip"></div>
     <div class="peak" id="peak"></div>
     <div class="axis-x"><span id="x-from"></span><span id="x-to"></span></div>
   </section>
 
-  <section class="cards">
-    <div class="card"><div class="card-label">Today</div><div class="card-value" id="today">&mdash;</div></div>
-    <div class="card"><div class="card-label" id="cycle-label">This cycle</div><div class="card-value" id="cycle">&mdash;</div></div>
-  </section>
+  <div class="totals">
+    <div><span class="k">Today</span><span class="v" id="today">&mdash;</span></div>
+    <div><span class="k" id="cycle-label">This cycle</span><span class="v" id="cycle">&mdash;</span></div>
+  </div>
 
   <section class="cap" id="cap">
     <div class="cap-head"><span class="used" id="cap-used"></span><span class="pct" id="cap-pct"></span></div>
-    <div class="cap-bar"><div id="cap-fill" style="width:0%"></div></div>
+    <div class="cap-bar"><div id="cap-fill"></div></div>
     <div class="cap-foot" id="cap-foot"></div>
   </section>
 
-  <div class="section-head">
-    <div class="section-title">Usage by</div>
+  <div class="listhead">
+    <span class="sheet-title" id="rows-title">Apps</span>
     <div class="seg" id="modes">
       <button data-mode="apps" class="on">Apps</button>
       <button data-mode="ifaces">Interfaces</button>
     </div>
   </div>
-  <div class="hint" id="hint"></div>
   <div class="rows" id="rows"></div>
 
   <footer>
-    <span id="note">Drag the chart to zoom</span>
+    <span id="note"></span>
     <button id="settings-btn">Settings</button>
     <button id="quit">Quit</button>
   </footer>
@@ -456,89 +487,84 @@
     <div class="settings-head">
       <button id="settings-back" aria-label="Back">&#8249;</button>
       <span>Settings</span>
-      <span class="settings-version" id="settings-version"></span>
+      <span id="settings-version"></span>
     </div>
 
     <div class="group">
       <div class="group-title">Data cap</div>
-      <div class="cap-row">
+      <div class="cap-input">
         <input type="number" id="cap" min="0" step="0.5" placeholder="no cap">
         <div class="seg seg-tight" id="cap-unit-seg">
           <button data-v="GB">GB</button>
           <button data-v="MB">MB</button>
         </div>
       </div>
-      <div class="group-note" id="cap-usage"></div>
-      <div class="row-inline">
-        <span>Resets</span>
+      <div class="row-note" id="cap-usage"></div>
+      <div class="line">
+        <span class="k">Resets</span>
         <div class="seg seg-tight" id="cycle-seg">
           <button data-v="monthly">Monthly</button>
           <button data-v="weekly">Weekly</button>
         </div>
         <input type="number" id="reset-day" min="1" max="31" step="1" title="day of the month">
       </div>
-      <div class="group-note" id="recording-note"></div>
+      <div class="row-note" id="recording-note"></div>
       <button class="textbtn" id="clear-history">Clear recorded history</button>
     </div>
 
     <div class="group">
       <div class="group-title">Alerts</div>
       <div class="chips" id="warn-chips"></div>
-      <div class="group-note">A desktop notification each time the cycle reaches one of these.</div>
+      <div class="row-note">A notification each time the cycle reaches one of these.</div>
     </div>
 
     <div class="group">
-      <div class="group-title">Appearance</div>
-      <div class="row-inline">
-        <span>Theme</span>
+      <div class="group-title">Display</div>
+      <div class="line">
+        <span class="k">Theme</span>
         <div class="seg" id="theme-seg">
           <button data-v="system">System</button>
           <button data-v="light">Light</button>
           <button data-v="dark">Dark</button>
         </div>
       </div>
-      <div class="row-inline">
-        <span>Opacity</span>
+      <div class="line">
+        <span class="k">Opacity</span>
         <input type="range" id="opacity" min="35" max="100" step="1">
         <span class="value" id="opacity-value"></span>
+      </div>
+      <div class="line">
+        <span class="k">Menu bar</span>
+        <div class="seg" id="menu-seg">
+          <button data-v="icon">Icon</button>
+          <button data-v="rate">Rate</button>
+          <button data-v="total">Total</button>
+        </div>
+      </div>
+      <div class="line">
+        <span class="k">Units</span>
+        <div class="seg" id="unit-seg">
+          <button data-v="auto">Auto</button>
+          <button data-v="binary">Binary</button>
+          <button data-v="decimal">Decimal</button>
+        </div>
       </div>
     </div>
 
     <div class="group">
       <div class="group-title">Startup</div>
-      <div class="row-inline">
-        <span>Open at login</span>
-        <div class="seg" id="login-seg">
-          <button data-v="off">Off</button>
-          <button data-v="on">On</button>
-        </div>
+      <div class="line">
+        <span class="k">Open at login</span>
+        <button class="switch" id="login-switch" role="switch" aria-label="Open at login"></button>
       </div>
-      <div class="group-note" id="login-note"></div>
-    </div>
-
-    <div class="group">
-      <div class="group-title">Menu bar</div>
-      <div class="seg" id="menu-seg">
-        <button data-v="icon">Icon</button>
-        <button data-v="rate">Rate</button>
-        <button data-v="total">Total</button>
-      </div>
-    </div>
-
-    <div class="group">
-      <div class="group-title">Units</div>
-      <div class="seg" id="unit-seg">
-        <button data-v="auto">Auto</button>
-        <button data-v="binary">Binary</button>
-        <button data-v="decimal">Decimal</button>
-      </div>
+      <div class="row-note" id="login-note"></div>
     </div>
 
     <div class="settings-actions">
       <button id="settings-cancel">Cancel</button>
       <button id="settings-save">Save</button>
     </div>
-    <div class="settings-foot-note" id="settings-msg">Leave the cap empty for no cap.</div>
+    <div class="settings-foot-note" id="settings-msg"></div>
   </div>
 </div>
 
@@ -556,28 +582,97 @@
     { key: "7d", label: "7D" }, { key: "30d", label: "30D" },
     { key: "today", label: "Today" }, { key: "cycle", label: "Cycle" }
   ];
-  var W = 300, H = 108, PADT = 10, PADB = 4;
+  var WARN_LEVELS = [0.5, 0.8, 0.9, 1.0];
+  var W = 300, H = 122, PADT = 8, PADB = 4;
 
   var state = null;
   var mode = "apps";
   var lastPreset = "today";
+  var sheetOpen = false;
+  var capUnit = "GB";
+  var clearArmed = false;
+  var DEMO = window.__netmeterDemo === true;
+  if (DEMO) { document.documentElement.dataset.demo = "true"; }
+  /// Dev aid: "sheet" or "settings" opens that view once the first state lands.
+  var REVEAL_PENDING = window.__netmeterReveal || "";
+  /*
+    A made-up dataset used by NETMETER_DEMO. Documentation screenshots must not
+    contain anyone's real traffic, interface names or running apps, so in demo
+    mode the pushed state is ignored entirely in favour of this.
+  */
+  function demoState() {
+    var now = Math.floor(Date.now() / 1000);
+    var bucket = 1800, points = 48;
+    var series = [];
+    var day = 25 * 3600;
+    for (var i = 0; i < points; i++) {
+      var rx = Math.abs(Math.sin(i * 0.29)) * 2.6e8 + Math.abs(Math.sin(i * 0.07)) * 7.0e7;
+      series.push({
+        t: now - day + i * bucket,
+        rx: Math.round(rx),
+        tx: Math.round(rx * 0.16)
+      });
+    }
+    var GB = 1e9;
+    return {
+      range: "today",
+      rangeLabel: "Today",
+      window: [now - day, now],
+      custom: null,
+      // Chosen so the live rate and the chart peak sit in the same range: a
+      // screenshot where they differ by 100x looks like a bug.
+      rate: { rx: 240000, tx: 38000 },
+      series: series,
+      bucketSecs: bucket,
+      totals: { rx: 5100000000, tx: 700000000, total: 5800000000 },
+      today: { rx: 5100000000, tx: 700000000, total: 5800000000 },
+      cycle: { rx: 28800000000, tx: 3900000000, total: 32700000000 },
+      plan: {
+        enabled: true, cap: 50 * GB, used: 32700000000, percent: 65.4,
+        cycle: "monthly", resetDay: 1, warnAt: [0.8, 1.0]
+      },
+      interfaces: [
+        { name: "en0 \u00b7 Wi-Fi", rx: 26000000000, tx: 3600000000, total: 29600000000, rateRx: 1200000, rateTx: 210000 },
+        { name: "en6 \u00b7 iPhone USB", rx: 6800000000, tx: 620000000, total: 7420000000, rateRx: 620000, rateTx: 130000 }
+      ],
+      apps: [
+        { name: "Safari", rx: 1240000000, tx: 180000000, total: 1420000000, rateRx: 880000, rateTx: 96000 },
+        { name: "Xcode", rx: 640000000, tx: 92000000, total: 732000000, rateRx: 420000, rateTx: 54000 },
+        { name: "Slack", rx: 210000000, tx: 38000000, total: 248000000, rateRx: 96000, rateTx: 21000 },
+        { name: "Dropbox", rx: 180000000, tx: 12000000, total: 192000000, rateRx: 64000, rateTx: 6000 },
+        { name: "Mail", rx: 42000000, tx: 8000000, total: 50000000, rateRx: 12000, rateTx: 3000 },
+        { name: "Music", rx: 18000000, tx: 2000000, total: 20000000, rateRx: 4200, rateTx: 900 }
+      ],
+      appsSupported: true,
+      appsError: null,
+      unit: "auto",
+      menuBar: "icon",
+      theme: "dark",
+      opacity: 1,
+      recordingSince: now - 30 * 86400,
+      launchAtLogin: true,
+      launchAtLoginAvailable: true,
+      version: "0.1.0"
+    };
+  }
+
+  // Computed once, so the demo figures stay put for the life of the window.
+  var DEMO_STATE = DEMO ? demoState() : null;
+
   var el = function (id) { return document.getElementById(id); };
   var post = function (msg) { window.ipc.postMessage(JSON.stringify(msg)); };
-  var sheetOpen = false;
 
-  /* Colours live in CSS so light and dark stay in one place. */
+  /* ---------- theme and opacity ---------- */
   function themeColors() {
     var cs = getComputedStyle(document.documentElement);
     return {
       rx: cs.getPropertyValue("--rx").trim() || "#4da3ff",
       tx: cs.getPropertyValue("--tx").trim() || "#ff9f0a",
-      grid: cs.getPropertyValue("--grid").trim() || "rgba(255,255,255,0.05)"
+      grid: cs.getPropertyValue("--grid").trim() || "rgba(255,255,255,0.06)"
     };
   }
   var THEME = themeColors();
   var SYSTEM_LIGHT = window.matchMedia("(prefers-color-scheme: light)");
-  // Pending appearance choices while the settings view is open, so the change
-  // previews immediately but is only committed on Save.
   var draftTheme = null;
   var draftOpacity = null;
 
@@ -591,8 +686,6 @@
     var opacity = draftOpacity != null ? draftOpacity : s ? s.opacity : 0.72;
     document.documentElement.style.setProperty("--panel-alpha", String(opacity));
   }
-  /// Dev aid: "sheet" or "settings" opens that view once the first state lands.
-  var REVEAL_PENDING = window.__netmeterReveal || "";
 
   /* ---------- formatting ---------- */
   function split(value) {
@@ -604,50 +697,53 @@
     if (unit === "binary") { BASE = 1024; UNITS = BINARY_UNITS; }
     else { BASE = 1000; UNITS = DECIMAL_UNITS; }
   }
+  function number(value, digits) {
+    return digits === 0 ? String(Math.round(value)) : value.toFixed(digits);
+  }
   function bytes(v) {
-    var p = split(v), n = p[1] === 0 ? String(Math.round(p[0])) : p[0].toFixed(p[0] < 10 ? 2 : 1);
-    return n + " " + UNITS[p[1]];
+    var p = split(v);
+    return number(p[0], p[1] === 0 ? 0 : p[0] < 10 ? 2 : 1) + " " + UNITS[p[1]];
   }
   function rateParts(v) {
-    var p = split(v), n = p[1] === 0 ? String(Math.round(p[0])) : p[0].toFixed(p[0] < 10 ? 2 : 1);
-    return [n, UNITS[p[1]] + "/s"];
+    var p = split(v);
+    return [number(p[0], p[1] === 0 ? 0 : p[0] < 10 ? 2 : 1), UNITS[p[1]] + "/s"];
   }
   function rateShort(v) {
-    var p = split(v), n = p[1] === 0 ? String(Math.round(p[0])) : p[0].toFixed(p[0] < 10 ? 1 : 0);
-    return n + UNITS[p[1]];
+    var p = split(v);
+    return number(p[0], p[1] === 0 ? 0 : p[0] < 10 ? 1 : 0) + UNITS[p[1]];
   }
   function rateText(v) {
-    var p = split(v), n = p[1] === 0 ? String(Math.round(p[0])) : p[0].toFixed(p[0] < 10 ? 2 : 1);
-    return n + " " + UNITS[p[1]] + "/s";
+    var p = split(v);
+    return number(p[0], p[1] === 0 ? 0 : p[0] < 10 ? 2 : 1) + " " + UNITS[p[1]] + "/s";
   }
-  function clockTime(ts) { return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+  function clockTime(ts) {
+    return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  function dayTime(ts) {
+    return new Date(ts * 1000).toLocaleDateString([], { month: "short", day: "numeric" });
+  }
   function stamp(ts) {
     return new Date(ts * 1000).toLocaleString([], {
       month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
     });
   }
   function axisLabel(ts, spanSecs) {
-    return spanSecs > 3 * 86400
-      ? new Date(ts * 1000).toLocaleDateString([], { month: "short", day: "numeric" })
-      : clockTime(ts);
+    return spanSecs > 3 * 86400 ? dayTime(ts) : clockTime(ts);
   }
   function ordinal(n) {
     var s = ["th", "st", "nd", "rd"], v = n % 100;
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
   }
-
-  /* One line describing the active window. */
   function describe(s) {
     if (s.range !== "custom" || !s.custom) { return s.rangeLabel; }
     var a = new Date(s.custom[0] * 1000), b = new Date(s.custom[1] * 1000);
-    var day = function (d) { return d.toLocaleDateString([], { month: "short", day: "numeric" }); };
     var time = function (d) { return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); };
     return a.toDateString() === b.toDateString()
-      ? day(a) + " " + time(a) + "\u2013" + time(b)
-      : day(a) + " \u2192 " + day(b);
+      ? dayTime(s.custom[0]) + " " + time(a) + "\u2013" + time(b)
+      : dayTime(s.custom[0]) + " \u2192 " + dayTime(s.custom[1]);
   }
 
-  /* ---------- chips ---------- */
+  /* ---------- quick ranges ---------- */
   var chips = el("chips");
   CHIPS.forEach(function (c) {
     var b = document.createElement("button");
@@ -658,7 +754,7 @@
     chips.appendChild(b);
   });
 
-  /* ---------- sheet ---------- */
+  /* ---------- range sheet ---------- */
   function dateValue(ts) {
     var d = new Date(ts * 1000), p = function (n) { return String(n).padStart(2, "0"); };
     return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
@@ -679,6 +775,11 @@
     var ms = new Date(d + "T" + (el(timeId).value || "00:00")).getTime();
     return isNaN(ms) ? 0 : Math.floor(ms / 1000);
   }
+  function message(text, bad) {
+    var m = el("sheet-msg");
+    m.textContent = text;
+    m.classList.toggle("bad", !!bad);
+  }
   function setSheet(open) {
     sheetOpen = open;
     el("sheet").classList.toggle("open", open);
@@ -686,13 +787,8 @@
     if (open && state) {
       var w = state.custom || state.window;
       fillInputs(w[0], w[1]);
-      message("Tip: you can drag across the chart to zoom.", false);
+      message("Tip: drag across the chart to zoom.", false);
     }
-  }
-  function message(text, bad) {
-    var m = el("sheet-msg");
-    m.textContent = text;
-    m.classList.toggle("bad", !!bad);
   }
 
   el("range-btn").addEventListener("click", function () { setSheet(!sheetOpen); });
@@ -707,7 +803,6 @@
     message("Applying\u2026", false);
     post({ type: "custom", from: from, to: to });
   });
-
   document.addEventListener("mousedown", function (ev) {
     if (!sheetOpen) { return; }
     if (el("sheet").contains(ev.target) || el("range-btn").contains(ev.target)) { return; }
@@ -715,16 +810,6 @@
   });
 
   el("quit").addEventListener("click", function () { post({ type: "quit" }); });
-  document.addEventListener("keydown", function (e) {
-    if (e.key !== "Escape") { return; }
-    if (el("settings").classList.contains("open")) {
-      closeSettings();
-    } else if (sheetOpen) {
-      setSheet(false);
-    } else {
-      post({ type: "hide" });
-    }
-  });
 
   var modes = el("modes");
   modes.addEventListener("click", function (e) {
@@ -745,12 +830,13 @@
       svg.innerHTML = "";
       empty.style.display = "flex";
       peak.textContent = "";
+      el("x-from").textContent = "";
+      el("x-to").textContent = "";
       return;
     }
     empty.style.display = "none";
 
-    // Each point holds the bytes for one bucket; the graph shows rates, so
-    // divide by the bucket width.
+    // A point holds the bytes for one bucket; the graph is a rate, so divide.
     var secs = s.bucketSecs || 1;
     var asRate = function (point) { return { rx: point.rx / secs, tx: point.tx / secs }; };
 
@@ -759,7 +845,7 @@
       var r = asRate(pts[i]);
       max = Math.max(max, r.rx, r.tx);
     }
-    var top = max * 1.15;
+    var top = max * 1.12;
     peak.textContent = "peak " + rateText(max);
 
     var px = function (i) { return (i / (pts.length - 1)) * W; };
@@ -775,18 +861,19 @@
     }
     area += " L " + W + " " + H + " Z";
 
-    var grid = "";
-    for (var g = 1; g <= 3; g++) {
-      var gy = (PADT + (H - PADT - PADB) * (g / 4)).toFixed(1);
-      grid += '<line x1="0" y1="' + gy + '" x2="' + W + '" y2="' + gy +
-              '" stroke="' + THEME.grid + '" stroke-width="1" vector-effect="non-scaling-stroke"/>';
-    }
+    // Two faint rules only: enough to read scale, not enough to be a grid.
+    var rules = "";
+    [1 / 3, 2 / 3].forEach(function (fraction) {
+      var gy = (PADT + (H - PADT - PADB) * fraction).toFixed(1);
+      rules += '<line x1="0" y1="' + gy + '" x2="' + W + '" y2="' + gy +
+               '" stroke="' + THEME.grid + '" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    });
 
     svg.innerHTML =
       '<defs><linearGradient id="rxg" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0%" stop-color="' + THEME.rx + '" stop-opacity="0.42"/>' +
-      '<stop offset="100%" stop-color="' + THEME.rx + '" stop-opacity="0.02"/></linearGradient></defs>' +
-      grid +
+      '<stop offset="0%" stop-color="' + THEME.rx + '" stop-opacity="0.35"/>' +
+      '<stop offset="100%" stop-color="' + THEME.rx + '" stop-opacity="0.01"/></linearGradient></defs>' +
+      rules +
       '<path d="' + area + '" fill="url(#rxg)" stroke="none"/>' +
       '<path d="' + rxLine + '" fill="none" stroke="' + THEME.rx +
       '" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
@@ -831,7 +918,6 @@
     sel.style.width = "0px";
     sel.style.display = "block";
   });
-
   document.addEventListener("mousemove", function (ev) {
     if (!dragging) { return; }
     var box = chart.getBoundingClientRect();
@@ -840,7 +926,6 @@
     sel.style.left = Math.min(a, b) + "px";
     sel.style.width = Math.abs(b - a) + "px";
   });
-
   document.addEventListener("mouseup", function (ev) {
     if (!dragging) { return; }
     dragging = false;
@@ -857,7 +942,7 @@
     post({ type: "custom", from: from, to: to });
   });
 
-  /* ---------- rows ---------- */
+  /* ---------- usage rows ---------- */
   function row(name, rate, total) {
     var d = document.createElement("div");
     d.className = "row";
@@ -873,12 +958,11 @@
     d.textContent = text;
     return d;
   }
-
   function renderRows(s) {
-    var host = el("rows"), hint = el("hint");
+    var host = el("rows");
     host.innerHTML = "";
     if (mode === "apps") {
-      hint.textContent = "since launch";
+      el("rows-title").textContent = "Apps \u00b7 since launch";
       if (!s.appsSupported) {
         host.appendChild(blank("Per-app usage needs macOS nettop." +
           (s.appsError ? " (" + s.appsError + ")" : "")));
@@ -895,7 +979,7 @@
       });
       return;
     }
-    hint.textContent = describe(s);
+    el("rows-title").textContent = "Interfaces \u00b7 " + describe(s);
     if (!s.interfaces.length) {
       host.appendChild(blank("No traffic recorded for this window."));
       return;
@@ -908,9 +992,7 @@
   }
 
   /* ---------- settings ---------- */
-  var WARN_LEVELS = [0.5, 0.8, 0.9, 1.0];
   var warnChips = el("warn-chips");
-
   WARN_LEVELS.forEach(function (level) {
     var b = document.createElement("button");
     b.className = "chip";
@@ -950,7 +1032,6 @@
     return out;
   }
 
-  var capUnit = "GB";
   function factor(unit) { return unit === "GB" ? 1e9 : 1e6; }
 
   wireSeg("cycle-seg", function (value) {
@@ -968,7 +1049,6 @@
     }
     capUnit = value;
   });
-
   wireSeg("theme-seg", function (value) {
     draftTheme = value;
     applyAppearance(state);
@@ -983,12 +1063,13 @@
     applyAppearance(state);
   });
 
-  wireSeg("login-seg", function (value) {
-    post({ type: "set-launch-at-login", enabled: value === "on" });
+  var loginSwitch = el("login-switch");
+  loginSwitch.addEventListener("click", function () {
+    if (loginSwitch.disabled) { return; }
+    post({ type: "set-launch-at-login", enabled: !loginSwitch.classList.contains("on") });
   });
 
   var clearButton = el("clear-history");
-  var clearArmed = false;
   function disarmClear() {
     clearArmed = false;
     clearButton.classList.remove("armed");
@@ -1029,19 +1110,19 @@
     el("reset-day").value = plan.resetDay;
     el("reset-day").style.display = plan.cycle === "weekly" ? "none" : "";
     setWarn(plan.warnAt && plan.warnAt.length ? plan.warnAt : [0.8, 1.0]);
-    setSeg("menu-seg", state.menuBar);
-    setSeg("unit-seg", state.unit);
     setSeg("theme-seg", state.theme);
     opacityInput.value = String(Math.round((state.opacity || 0.72) * 100));
     el("opacity-value").textContent = opacityInput.value + "%";
-    setSeg("login-seg", state.launchAtLogin ? "on" : "off");
-    el("login-seg").classList.toggle("off", !state.launchAtLoginAvailable);
+    setSeg("menu-seg", state.menuBar);
+    setSeg("unit-seg", state.unit);
+    loginSwitch.classList.toggle("on", !!state.launchAtLogin);
+    loginSwitch.disabled = !state.launchAtLoginAvailable;
     el("login-note").textContent = state.launchAtLoginAvailable
-      ? "Keeps recording across restarts, so the totals have no gaps."
-      : "Only available when NetMeter runs from its .app bundle.";
+      ? ""
+      : "Unavailable: launch at login needs the .app bundle, not a bare binary.";
     el("settings-version").textContent = "v" + state.version;
     el("recording-note").textContent = state.recordingSince
-      ? "Recording since " + dayTime(state.recordingSince) + ", and only while NetMeter runs."
+      ? "Counts only while NetMeter runs."
       : "Nothing recorded yet.";
     capNote(cap);
     el("settings-msg").textContent = "Leave the cap empty for no cap.";
@@ -1078,8 +1159,22 @@
     setTimeout(function () { el("settings").classList.remove("open"); }, 450);
   });
 
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") { return; }
+    if (el("settings").classList.contains("open")) {
+      closeSettings();
+    } else if (sheetOpen) {
+      setSheet(false);
+    } else {
+      post({ type: "hide" });
+    }
+  });
+
   /* ---------- main render ---------- */
   function renderRate(r) {
+    // Rust pushes the live rate every second; in demo mode that would overwrite
+    // the invented figure with a real one.
+    if (DEMO_STATE) { r = DEMO_STATE.rate; }
     var rx = rateParts(r.rx), tx = rateParts(r.tx);
     el("rate-rx").textContent = rx[0];
     el("unit-rx").textContent = rx[1];
@@ -1088,11 +1183,11 @@
   }
 
   function render(s) {
+    if (DEMO_STATE) { s = DEMO_STATE; }
     state = s;
     applyAppearance(s);
     THEME = themeColors();
     applyUnit(s.unit);
-
     renderRate(s.rate);
 
     el("range-label").textContent = describe(s);

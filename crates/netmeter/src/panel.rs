@@ -439,6 +439,7 @@ impl Panel {
         target: &EventLoopWindowTarget<T>,
         reveal: Option<&str>,
         theme: Theme,
+        demo: bool,
         on_message: impl Fn(String) + 'static,
     ) -> Result<Self> {
         let window = WindowBuilder::new()
@@ -471,6 +472,11 @@ impl Panel {
             // it has state to show. Only used by the preview mode.
             builder =
                 builder.with_initialization_script(format!("window.__netmeterReveal = {what:?};"));
+        }
+        if demo {
+            // Makes the page draw a made-up dataset instead of real traffic, so
+            // screenshots for the README contain nothing of anyone's.
+            builder = builder.with_initialization_script("window.__netmeterDemo = true;");
         }
         let webview = builder
             .with_ipc_handler(move |request| on_message(request.body().clone()))
