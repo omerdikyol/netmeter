@@ -3,6 +3,7 @@
 use crate::apps::AppMonitor;
 use crate::icon_text::IconRenderer;
 use crate::instance;
+use crate::login_item;
 use crate::menu::{TrayMenu, ID_OPEN, ID_QUIT};
 use crate::menu_icon;
 use crate::notify;
@@ -266,11 +267,18 @@ impl App {
         if let Some(unit) = parse_setting(&request.unit) {
             config.general.unit = unit;
         }
+        if let Some(theme) = parse_setting(&request.theme) {
+            config.appearance.theme = theme;
+        }
+        if request.opacity.is_finite() {
+            config.appearance.opacity = request.opacity;
+        }
 
         if let Err(err) = config.save() {
             eprintln!("netmeter: could not save settings: {err:#}");
         }
         self.mode = config.general.menu_bar;
+        self.panel.set_theme(config.appearance.theme);
         self.tracker.set_config(config);
         // Force the title to redraw, including going back to the glyph.
         self.last_icon_label = None;
@@ -373,6 +381,32 @@ impl App {
                 self.apply_settings(request);
                 false
             }
+            Ok(PanelMessage::SetLaunchAtLogin { enabled }) => {
+                let result = if enabled {
+                    login_item::enable()
+                } else {
+                    login_item::disable()
+                };
+                if let Err(err) = result {
+                    eprintln!("netmeter: {err:#}");
+                } else {
+                    let mut config = self.tracker.config().clone();
+                    config.general.launch_at_login = enabled;
+                    if let Err(err) = config.save() {
+                        eprintln!("netmeter: could not save settings: {err:#}");
+                    }
+                    self.tracker.set_config(config);
+                }
+                self.push_state();
+                false
+            }
+            Ok(PanelMessage::ClearHistory) => {
+                if let Err(err) = self.tracker.reset_history() {
+                    eprintln!("netmeter: {err:#}");
+                }
+                self.push_state();
+                false
+            }
             Ok(PanelMessage::Hide) => {
                 self.panel.hide();
                 false
@@ -418,6 +452,10 @@ pub fn run() -> Result<()> {
 
     // Held for the whole process; the OS releases it on exit.
     let _instance = instance::acquire()?;
+
+    // Re-point an existing login item at wherever the app lives now, so moving
+    // it into /Applications does not silently break starting at login.
+    login_item::refresh();
 
     let mut builder = EventLoopBuilder::<UserEvent>::with_user_event();
     let mut event_loop = builder.build();
@@ -469,7 +507,7 @@ pub fn run() -> Result<()> {
             Event::NewEvents(StartCause::Init) => {
                 if let Some(tracker) = tracker_slot.take() {
                     let built = ipc_proxy.take().map(|proxy| {
-                        Panel::new(target, reveal, move |message| {
+                        Panel::new(target, reveal, config.appearance.theme, move |message| {
                             let _ = proxy.send_event(UserEvent::Ipc(message));
                         })
                         .and_then(|panel| App::new(config.clone(), tracker, panel))

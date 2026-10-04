@@ -16,6 +16,10 @@
     --card: rgba(255, 255, 255, 0.05);
     --card-hi: rgba(255, 255, 255, 0.1);
     --grid: rgba(255, 255, 255, 0.07);
+    /* RGB triplets, so the opacity setting can vary the alpha. */
+    --panel: 28, 28, 31;
+    --sheet: 22, 22, 25;
+    --panel-alpha: 0.72;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,7 +43,7 @@
     height: 100%;
     padding: 12px 14px 10px;
     gap: 8px;
-    background: rgba(28, 28, 31, 0.55);
+    background: rgba(var(--panel), var(--panel-alpha));
     border: 1px solid var(--line);
     border-radius: 14px;
   }
@@ -90,7 +94,7 @@
     position: absolute; left: 10px; right: 10px; top: 72px;
     display: flex; flex-direction: column; gap: 8px;
     padding: 10px; z-index: 6;
-    background: rgba(22, 22, 25, 0.97);
+    background: rgba(var(--sheet), calc(var(--panel-alpha) * 0.25 + 0.7));
     border: 1px solid rgba(255, 255, 255, 0.11);
     border-radius: 11px;
     box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
@@ -245,7 +249,7 @@
     position: absolute; inset: 0; z-index: 8;
     display: flex; flex-direction: column; gap: 14px;
     padding: 12px 14px 11px;
-    background: rgba(22, 22, 25, 0.99);
+    background: rgba(var(--sheet), calc(var(--panel-alpha) * 0.2 + 0.78));
     border-radius: 14px;
     opacity: 0; pointer-events: none;
     transition: opacity 0.13s ease;
@@ -307,8 +311,12 @@
   .settings input:focus { outline: 1px solid var(--rx); outline-offset: -1px; }
 
   .settings-actions {
-    display: flex; gap: 8px; margin-top: auto; padding-top: 11px;
+    /* Pinned to the bottom of the scrolling sheet, so Save is always reachable. */
+    position: sticky; bottom: -11px; z-index: 1;
+    display: flex; gap: 8px; margin-top: auto;
+    padding: 10px 0 14px;
     border-top: 1px solid var(--line);
+    background: rgba(var(--sheet), 0.97);
   }
   .settings-actions button {
     flex: 1; appearance: none; border: 0; border-radius: 8px;
@@ -320,41 +328,57 @@
   #settings-save { background: var(--rx); color: #06121f; }
   #settings-save:hover { filter: brightness(1.08); }
   .settings-foot-note { font-size: 10px; color: var(--fg-faint); text-align: center; }
+  .settings-version { margin-left: auto; font-size: 10px; font-weight: 400; color: var(--fg-faint); }
+  .row-inline input[type="range"] {
+    flex: 1; appearance: none; height: 4px; border-radius: 2px;
+    background: rgba(0, 0, 0, 0.25); outline: none; min-width: 0;
+  }
+  .row-inline input[type="range"]::-webkit-slider-thumb {
+    appearance: none; width: 13px; height: 13px; border-radius: 50%;
+    background: var(--fg); border: 0;
+  }
+  .row-inline .value {
+    width: 34px; flex: none; text-align: right; font-size: 10.5px;
+    color: var(--fg-dim); font-variant-numeric: tabular-nums;
+  }
+  .textbtn {
+    appearance: none; border: 0; background: transparent; color: var(--fg-dim);
+    font: inherit; font-size: 10.5px; text-align: left; padding: 1px 0;
+    cursor: default; align-self: flex-start;
+  }
+  .textbtn:hover { color: var(--fg); }
+  .textbtn.armed { color: #ff6f66; font-weight: 600; }
+  .seg.off { opacity: 0.4; pointer-events: none; }
 
   /* ---------- light appearance ---------- */
-  @media (prefers-color-scheme: light) {
-    :root {
-      --rx: #0071e3;
-      --tx: #c26a00;
-      --fg: #1c1c1e;
-      --fg-dim: rgba(60, 60, 67, 0.62);
-      --fg-faint: rgba(60, 60, 67, 0.5);
-      --line: rgba(0, 0, 0, 0.1);
-      --card: rgba(0, 0, 0, 0.045);
-      --card-hi: rgba(0, 0, 0, 0.085);
-      --grid: rgba(0, 0, 0, 0.1);
-    }
-    #app { background: rgba(250, 250, 252, 0.62); }
-    .settings { background: rgba(252, 252, 253, 0.99); }
-    .settings .seg { background: rgba(0, 0, 0, 0.05); }
-    .settings .seg button.on { background: rgba(0, 0, 0, 0.1); }
-    .settings .chips .chip { background: rgba(0, 0, 0, 0.05); }
-    .cap-row input, .row-inline input { background: rgba(0, 0, 0, 0.05); }
-    #settings-save { color: #fff; }
-    .chip.on { color: #fff; }
-    .sheet {
-      background: rgba(252, 252, 253, 0.98);
-      border-color: rgba(0, 0, 0, 0.1);
-      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
-    }
-    .field input { background: rgba(0, 0, 0, 0.05); }
-    .field input::-webkit-calendar-picker-indicator { filter: none; }
-    #tip { background: rgba(255, 255, 255, 0.97); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16); }
-    .cap-bar { background: rgba(0, 0, 0, 0.1); }
-    #sel { background: rgba(0, 113, 227, 0.14); }
-    .chip.on { color: #fff; }
-    .custom button { color: #fff; }
+  /* Driven by the theme setting, not the media query, so it can be overridden. */
+  :root[data-theme="light"] {
+    --rx: #0071e3;
+    --tx: #c26a00;
+    --fg: #1c1c1e;
+    --fg-dim: rgba(60, 60, 67, 0.62);
+    --fg-faint: rgba(60, 60, 67, 0.5);
+    --line: rgba(0, 0, 0, 0.1);
+    --card: rgba(0, 0, 0, 0.045);
+    --card-hi: rgba(0, 0, 0, 0.085);
+    --grid: rgba(0, 0, 0, 0.1);
+    --panel: 250, 250, 252;
+    --sheet: 252, 252, 253;
   }
+  :root[data-theme="light"] .sheet { border-color: rgba(0, 0, 0, 0.1); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18); }
+  :root[data-theme="light"] .settings .seg { background: rgba(0, 0, 0, 0.05); }
+  :root[data-theme="light"] .settings .seg button.on { background: rgba(0, 0, 0, 0.1); }
+  :root[data-theme="light"] .settings .chips .chip { background: rgba(0, 0, 0, 0.05); }
+  :root[data-theme="light"] .cap-row input,
+  :root[data-theme="light"] .row-inline input { background: rgba(0, 0, 0, 0.05); }
+  :root[data-theme="light"] .field input { background: rgba(0, 0, 0, 0.05); }
+  :root[data-theme="light"] .field input::-webkit-calendar-picker-indicator { filter: none; }
+  :root[data-theme="light"] #tip { background: rgba(255, 255, 255, 0.97); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16); }
+  :root[data-theme="light"] .cap-bar { background: rgba(0, 0, 0, 0.1); }
+  :root[data-theme="light"] #sel { background: rgba(0, 113, 227, 0.14); }
+  :root[data-theme="light"] .chip.on { color: #fff; }
+  :root[data-theme="light"] #settings-save { color: #fff; }
+  :root[data-theme="light"] .row-inline input[type="range"] { background: rgba(0, 0, 0, 0.12); }
 </style>
 </head>
 <body>
@@ -432,6 +456,7 @@
     <div class="settings-head">
       <button id="settings-back" aria-label="Back">&#8249;</button>
       <span>Settings</span>
+      <span class="settings-version" id="settings-version"></span>
     </div>
 
     <div class="group">
@@ -452,12 +477,43 @@
         </div>
         <input type="number" id="reset-day" min="1" max="31" step="1" title="day of the month">
       </div>
+      <div class="group-note" id="recording-note"></div>
+      <button class="textbtn" id="clear-history">Clear recorded history</button>
     </div>
 
     <div class="group">
       <div class="group-title">Alerts</div>
       <div class="chips" id="warn-chips"></div>
       <div class="group-note">A desktop notification each time the cycle reaches one of these.</div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">Appearance</div>
+      <div class="row-inline">
+        <span>Theme</span>
+        <div class="seg" id="theme-seg">
+          <button data-v="system">System</button>
+          <button data-v="light">Light</button>
+          <button data-v="dark">Dark</button>
+        </div>
+      </div>
+      <div class="row-inline">
+        <span>Opacity</span>
+        <input type="range" id="opacity" min="35" max="100" step="1">
+        <span class="value" id="opacity-value"></span>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">Startup</div>
+      <div class="row-inline">
+        <span>Open at login</span>
+        <div class="seg" id="login-seg">
+          <button data-v="off">Off</button>
+          <button data-v="on">On</button>
+        </div>
+      </div>
+      <div class="group-note" id="login-note"></div>
     </div>
 
     <div class="group">
@@ -519,6 +575,22 @@
     };
   }
   var THEME = themeColors();
+  var SYSTEM_LIGHT = window.matchMedia("(prefers-color-scheme: light)");
+  // Pending appearance choices while the settings view is open, so the change
+  // previews immediately but is only committed on Save.
+  var draftTheme = null;
+  var draftOpacity = null;
+
+  function resolveTheme(pref) {
+    if (pref === "light" || pref === "dark") { return pref; }
+    return SYSTEM_LIGHT.matches ? "light" : "dark";
+  }
+  function applyAppearance(s) {
+    var theme = draftTheme || (s ? s.theme : "system");
+    document.documentElement.dataset.theme = resolveTheme(theme);
+    var opacity = draftOpacity != null ? draftOpacity : s ? s.opacity : 0.72;
+    document.documentElement.style.setProperty("--panel-alpha", String(opacity));
+  }
   /// Dev aid: "sheet" or "settings" opens that view once the first state lands.
   var REVEAL_PENDING = window.__netmeterReveal || "";
 
@@ -646,7 +718,7 @@
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") { return; }
     if (el("settings").classList.contains("open")) {
-      el("settings").classList.remove("open");
+      closeSettings();
     } else if (sheetOpen) {
       setSheet(false);
     } else {
@@ -897,6 +969,43 @@
     capUnit = value;
   });
 
+  wireSeg("theme-seg", function (value) {
+    draftTheme = value;
+    applyAppearance(state);
+    THEME = themeColors();
+    if (state) { render(state); }
+  });
+
+  var opacityInput = el("opacity");
+  opacityInput.addEventListener("input", function () {
+    draftOpacity = Number(opacityInput.value) / 100;
+    el("opacity-value").textContent = opacityInput.value + "%";
+    applyAppearance(state);
+  });
+
+  wireSeg("login-seg", function (value) {
+    post({ type: "set-launch-at-login", enabled: value === "on" });
+  });
+
+  var clearButton = el("clear-history");
+  var clearArmed = false;
+  function disarmClear() {
+    clearArmed = false;
+    clearButton.classList.remove("armed");
+    clearButton.textContent = "Clear recorded history";
+  }
+  clearButton.addEventListener("click", function () {
+    if (!clearArmed) {
+      clearArmed = true;
+      clearButton.classList.add("armed");
+      clearButton.textContent = "Click again to erase everything";
+      setTimeout(disarmClear, 3500);
+      return;
+    }
+    disarmClear();
+    post({ type: "clear-history" });
+  });
+
   function capNote(cap) {
     var used = state && state.plan ? state.plan.used || 0 : 0;
     el("cap-usage").textContent = cap
@@ -922,18 +1031,33 @@
     setWarn(plan.warnAt && plan.warnAt.length ? plan.warnAt : [0.8, 1.0]);
     setSeg("menu-seg", state.menuBar);
     setSeg("unit-seg", state.unit);
+    setSeg("theme-seg", state.theme);
+    opacityInput.value = String(Math.round((state.opacity || 0.72) * 100));
+    el("opacity-value").textContent = opacityInput.value + "%";
+    setSeg("login-seg", state.launchAtLogin ? "on" : "off");
+    el("login-seg").classList.toggle("off", !state.launchAtLoginAvailable);
+    el("login-note").textContent = state.launchAtLoginAvailable
+      ? "Keeps recording across restarts, so the totals have no gaps."
+      : "Only available when NetMeter runs from its .app bundle.";
+    el("settings-version").textContent = "v" + state.version;
+    el("recording-note").textContent = state.recordingSince
+      ? "Recording since " + dayTime(state.recordingSince) + ", and only while NetMeter runs."
+      : "Nothing recorded yet.";
     capNote(cap);
     el("settings-msg").textContent = "Leave the cap empty for no cap.";
     el("settings").classList.add("open");
   }
 
+  function closeSettings() {
+    el("settings").classList.remove("open");
+    draftTheme = null;
+    draftOpacity = null;
+    if (state) { render(state); }
+  }
+
   el("settings-btn").addEventListener("click", openSettings);
-  el("settings-back").addEventListener("click", function () {
-    el("settings").classList.remove("open");
-  });
-  el("settings-cancel").addEventListener("click", function () {
-    el("settings").classList.remove("open");
-  });
+  el("settings-back").addEventListener("click", closeSettings);
+  el("settings-cancel").addEventListener("click", closeSettings);
   el("settings-save").addEventListener("click", function () {
     var raw = parseFloat(el("cap").value);
     var cap = !raw || raw <= 0 ? 0 : Math.round(raw * factor(capUnit));
@@ -944,8 +1068,12 @@
       resetDay: parseInt(el("reset-day").value, 10) || 1,
       warnAt: getWarn(),
       menuBar: segValue("menu-seg") || "icon",
-      unit: segValue("unit-seg") || "auto"
+      unit: segValue("unit-seg") || "auto",
+      theme: segValue("theme-seg") || "system",
+      opacity: Number(opacityInput.value) / 100
     });
+    draftTheme = null;
+    draftOpacity = null;
     el("settings-msg").textContent = "Saved.";
     setTimeout(function () { el("settings").classList.remove("open"); }, 450);
   });
@@ -961,6 +1089,8 @@
 
   function render(s) {
     state = s;
+    applyAppearance(s);
+    THEME = themeColors();
     applyUnit(s.unit);
 
     renderRate(s.rate);
@@ -1003,11 +1133,10 @@
 
     renderRows(s);
 
-    if (s.range === "custom" && s.custom) {
-      el("note").textContent = stamp(s.custom[0]) + " \u2192 " + stamp(s.custom[1]);
-    } else {
-      el("note").textContent = "Drag the chart to zoom";
-    }
+    // Say what the totals actually cover, so a short number does not look wrong.
+    el("note").textContent = s.recordingSince
+      ? "Recording since " + dayTime(s.recordingSince)
+      : "Nothing recorded yet";
 
     if (REVEAL_PENDING) {
       var reveal = REVEAL_PENDING;
@@ -1016,8 +1145,7 @@
     }
   }
 
-  window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", function () {
-    THEME = themeColors();
+  SYSTEM_LIGHT.addEventListener("change", function () {
     if (state) { render(state); }
   });
 

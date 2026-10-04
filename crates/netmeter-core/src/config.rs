@@ -35,10 +35,22 @@ pub enum Cycle {
     Monthly,
 }
 
+/// Which appearance the panel uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    /// Follow the system setting.
+    System,
+    Light,
+    Dark,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct General {
     pub sample_interval_ms: u64,
+    /// Start NetMeter when you log in, so recording has no gaps.
+    pub launch_at_login: bool,
     pub menu_bar: MenuBarMode,
     pub unit: UnitSystem,
 }
@@ -47,9 +59,38 @@ impl Default for General {
     fn default() -> Self {
         Self {
             sample_interval_ms: 1000,
+            launch_at_login: false,
             // A quiet icon by default; the numbers live in the panel.
             menu_bar: MenuBarMode::Icon,
             unit: UnitSystem::Auto,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Appearance {
+    pub theme: Theme,
+    /// Opacity of the panel background, 0.35 (very translucent) to 1.0.
+    pub opacity: f64,
+}
+
+impl Default for Appearance {
+    fn default() -> Self {
+        Self {
+            theme: Theme::System,
+            opacity: 0.72,
+        }
+    }
+}
+
+impl Appearance {
+    /// Opacity, kept inside the range the panel can actually use.
+    pub fn opacity(&self) -> f64 {
+        if self.opacity.is_finite() {
+            self.opacity.clamp(0.35, 1.0)
+        } else {
+            Appearance::default().opacity
         }
     }
 }
@@ -83,6 +124,7 @@ impl Default for Plan {
 #[serde(default)]
 pub struct Config {
     pub general: General,
+    pub appearance: Appearance,
     pub plan: Plan,
 }
 
@@ -154,8 +196,35 @@ mod tests {
         let c = Config::default();
         assert_eq!(c.general.sample_interval_ms, 1000);
         assert_eq!(c.general.menu_bar, MenuBarMode::Icon);
+        assert!(!c.general.launch_at_login);
+        assert_eq!(c.appearance.theme, Theme::System);
         assert!(!c.plan.enabled);
         assert_eq!(c.plan.warn_at, vec![0.8, 1.0]);
+    }
+
+    #[test]
+    fn opacity_is_kept_usable() {
+        let mut appearance = Appearance::default();
+        assert!((appearance.opacity() - 0.72).abs() < 1e-9);
+        appearance.opacity = 0.0;
+        assert!((appearance.opacity() - 0.35).abs() < 1e-9);
+        appearance.opacity = 5.0;
+        assert!((appearance.opacity() - 1.0).abs() < 1e-9);
+        appearance.opacity = f64::NAN;
+        assert!((appearance.opacity() - 0.72).abs() < 1e-9);
+    }
+
+    #[test]
+    fn appearance_round_trips() {
+        let mut c = Config::default();
+        c.appearance.theme = Theme::Dark;
+        c.appearance.opacity = 0.5;
+        c.general.launch_at_login = true;
+
+        let back: Config = toml::from_str(&c.to_toml().unwrap()).unwrap();
+        assert_eq!(back.appearance.theme, Theme::Dark);
+        assert!((back.appearance.opacity - 0.5).abs() < 1e-9);
+        assert!(back.general.launch_at_login);
     }
 
     #[test]
@@ -182,11 +251,13 @@ mod tests {
 
     #[test]
     fn config_from_an_older_build_still_loads() {
-        // Sections we have since dropped must not stop the file parsing.
-        let text = "[general]\nsample_interval_ms = 500\nlaunch_at_login = true\n\n\
+        // Keys and sections we have dropped must not stop the file parsing.
+        let text = "[general]\nsample_interval_ms = 500\nlaunch_at_login = true\n\
+                    remove_me = 1\n\n\
                     [tracking]\ninterfaces = [\"en0\"]\nfollow_default = false\n";
         let c: Config = toml::from_str(text).expect("an older config should still load");
         assert_eq!(c.general.sample_interval_ms, 500);
+        assert!(c.general.launch_at_login);
         assert_eq!(c.general.menu_bar, MenuBarMode::Icon);
     }
 }

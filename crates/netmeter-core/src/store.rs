@@ -194,6 +194,20 @@ impl Store {
         )?;
         Ok(())
     }
+
+    pub fn meta_delete(&self, key: &str) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM meta WHERE key = ?1", params![key])?;
+        Ok(())
+    }
+
+    /// Oldest stored bucket, if there is any history at all.
+    pub fn first_timestamp(&self) -> Result<Option<i64>> {
+        let value = self.conn.query_row("SELECT MIN(ts) FROM usage", [], |r| {
+            r.get::<_, Option<i64>>(0)
+        })?;
+        Ok(value)
+    }
 }
 
 #[cfg(test)]
@@ -290,5 +304,18 @@ mod tests {
             store.meta_get("last_alert").unwrap().as_deref(),
             Some("1.0")
         );
+        store.meta_delete("last_alert").unwrap();
+        assert_eq!(store.meta_get("last_alert").unwrap(), None);
+    }
+
+    #[test]
+    fn reports_the_oldest_bucket() {
+        let store = Store::open_in_memory().unwrap();
+        assert_eq!(store.first_timestamp().unwrap(), None);
+        store.add_usage(300, &buckets(&[("en0", 1, 0)])).unwrap();
+        store.add_usage(60, &buckets(&[("en0", 1, 0)])).unwrap();
+        assert_eq!(store.first_timestamp().unwrap(), Some(60));
+        store.reset().unwrap();
+        assert_eq!(store.first_timestamp().unwrap(), None);
     }
 }

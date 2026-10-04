@@ -8,11 +8,12 @@
 use crate::apps::AppUsage;
 use anyhow::{Context, Result};
 use chrono::Local;
-use netmeter_core::config::{Cycle, MenuBarMode, Plan, UnitSystem};
+use netmeter_core::config::{Cycle, MenuBarMode, Plan, Theme, UnitSystem};
 use netmeter_core::model::{Rate, Traffic};
 use netmeter_core::stats::{self, Range};
 use netmeter_core::Tracker;
 use serde::{Deserialize, Serialize};
+use std::cell::Cell;
 use std::collections::HashMap;
 use tao::dpi::LogicalSize;
 use tao::event_loop::EventLoopWindowTarget;
@@ -39,6 +40,14 @@ pub enum PanelMessage {
     },
     /// The user saved the settings view.
     Save(SettingsRequest),
+    /// Start at login, or stop doing that.
+    #[serde(rename = "set-launch-at-login")]
+    SetLaunchAtLogin {
+        enabled: bool,
+    },
+    /// Forget all recorded usage.
+    #[serde(rename = "clear-history")]
+    ClearHistory,
     Hide,
     Quit,
 }
@@ -54,6 +63,8 @@ pub struct SettingsRequest {
     pub warn_at: Vec<f64>,
     pub menu_bar: String,
     pub unit: String,
+    pub theme: String,
+    pub opacity: f64,
 }
 
 #[derive(Serialize)]
@@ -132,6 +143,13 @@ pub struct PanelState {
     /// Current settings, so the settings view opens on the real values.
     unit: &'static str,
     menu_bar: &'static str,
+    theme: &'static str,
+    opacity: f64,
+    /// When recording began, so a short total does not look like a bug.
+    recording_since: Option<i64>,
+    launch_at_login: bool,
+    launch_at_login_available: bool,
+    version: &'static str,
 }
 
 /// Bucket width that keeps the chart at a readable number of points.
@@ -260,6 +278,16 @@ impl PanelState {
                 MenuBarMode::Rate => "rate",
                 MenuBarMode::Total => "total",
             },
+            theme: match tracker.config().appearance.theme {
+                Theme::System => "system",
+                Theme::Light => "light",
+                Theme::Dark => "dark",
+            },
+            opacity: tracker.config().appearance.opacity(),
+            recording_since: tracker.recording_since(),
+            launch_at_login: crate::login_item::is_enabled(),
+            launch_at_login_available: crate::login_item::is_available(),
+            version: env!("CARGO_PKG_VERSION"),
         })
     }
 }
@@ -267,6 +295,8 @@ impl PanelState {
 pub struct Panel {
     window: Window,
     webview: WebView,
+    /// Whether the panel is currently drawn for a dark appearance.
+    dark: Cell<bool>,
 }
 
 /// Bring the app to the front so the panel can become the key window.
@@ -290,6 +320,27 @@ fn activate_app() {
 #[cfg(not(target_os = "macos"))]
 fn activate_app() {}
 
+/// Blur behind the panel; the CSS only tints on top of it.
+///
+/// The material has to match the panel's appearance, or a light panel over a
+/// dark blur looks washed out. Re-applying means clearing the old effect view
+/// first, otherwise the two stack.
+#[cfg(target_os = "macos")]
+fn apply_material(window: &Window, dark: bool) {
+    use window_vibrancy::{apply_vibrancy, clear_vibrancy, NSVisualEffectMaterial};
+
+    let material = if dark {
+        NSVisualEffectMaterial::HudWindow
+    } else {
+        NSVisualEffectMaterial::Popover
+    };
+    let _ = clear_vibrancy(window);
+    let _ = apply_vibrancy(window, material, None, Some(12.0));
+}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_material(_window: &Window, _dark: bool) {}
+
 /// Where to put the panel, per platform.
 ///
 /// On macOS this goes through AppKit rather than tao's `set_outer_position`,
@@ -307,22 +358,49 @@ mod place {
     const TOP_GAP: f64 = 5.0;
     const SIDE_GAP: f64 = 8.0;
 
-    /// Put the window just under the menu bar: centred on `anchor_centre`
-    /// (points from the left of the screen) when given, else flush right.
-    pub fn under_menu_bar(window: &Window, anchor_centre: Option<f64>) {
+    /// Put the window just under the menu bar, on the screen that owns the tray
+    /// icon: centred on `anchor` (the tray icon's centre, in physical top-left
+    /// coordinates) when given, else flush right on the main screen.
+    pub fn under_menu_bar(window: &Window, anchor: Option<(f64, f64)>) {
         let Some(marker) = MainThreadMarker::new() else {
             return;
         };
-        let Some(screen) = NSScreen::mainScreen(marker) else {
+        let screens = NSScreen::screens(marker);
+        let Some(primary) = screens.iter().next() else {
             return;
         };
+
+        let scale = window.scale_factor();
+        let screen = match anchor {
+            Some((anchor_x, anchor_y)) => {
+                // AppKit's origin is the bottom left of the primary screen, so a
+                // y measured downward from the top has to be flipped to find the
+                // screen that contains it.
+                let point = NSPoint::new(
+                    anchor_x / scale,
+                    primary.frame().size.height - anchor_y / scale,
+                );
+                screens
+                    .iter()
+                    .find(|screen| {
+                        let frame = screen.frame();
+                        point.x >= frame.origin.x
+                            && point.x <= frame.origin.x + frame.size.width
+                            && point.y >= frame.origin.y
+                            && point.y <= frame.origin.y + frame.size.height
+                    })
+                    .unwrap_or(primary)
+            }
+            None => NSScreen::mainScreen(marker).unwrap_or(primary),
+        };
+
         let visible = screen.visibleFrame();
-        let size = window.outer_size().to_logical::<f64>(window.scale_factor());
+        let size = window.outer_size().to_logical::<f64>(scale);
 
         let left = visible.origin.x + SIDE_GAP;
         let right = visible.origin.x + visible.size.width - size.width - SIDE_GAP;
-        let wanted = match anchor_centre {
-            Some(centre) => centre - size.width / 2.0,
+        let wanted = match anchor {
+            Some((anchor_x, _)) => anchor_x / scale - size.width / 2.0,
             None => right,
         };
         // AppKit's origin is bottom left, so the top edge is the largest y.
@@ -342,7 +420,7 @@ mod place {
     use tao::dpi::PhysicalPosition;
     use tao::window::Window;
 
-    pub fn under_menu_bar(window: &Window, _anchor_centre: Option<f64>) {
+    pub fn under_menu_bar(window: &Window, _anchor: Option<(f64, f64)>) {
         let monitor = window
             .current_monitor()
             .or_else(|| window.primary_monitor());
@@ -360,6 +438,7 @@ impl Panel {
     pub fn new<T: 'static>(
         target: &EventLoopWindowTarget<T>,
         reveal: Option<&str>,
+        theme: Theme,
         on_message: impl Fn(String) + 'static,
     ) -> Result<Self> {
         let window = WindowBuilder::new()
@@ -373,18 +452,13 @@ impl Panel {
             .build(target)
             .context("failed to create the panel window")?;
 
-        #[cfg(target_os = "macos")]
-        {
-            use tao::window::Theme;
-            use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
-            // Blur behind the panel; the CSS only tints on top of it. The
-            // material follows the system appearance so light mode looks right.
-            let material = match window.theme() {
-                Theme::Light => NSVisualEffectMaterial::Popover,
-                _ => NSVisualEffectMaterial::HudWindow,
-            };
-            let _ = apply_vibrancy(&window, material, None, Some(12.0));
-        }
+        let dark = match theme {
+            Theme::Dark => true,
+            Theme::Light => false,
+            // Resolve the system setting once, from the window's own appearance.
+            Theme::System => !matches!(window.theme(), tao::window::Theme::Light),
+        };
+        apply_material(&window, dark);
 
         let mut builder = WebViewBuilder::new()
             .with_html(UI_HTML)
@@ -403,7 +477,25 @@ impl Panel {
             .build(&window)
             .context("failed to create the panel webview")?;
 
-        Ok(Self { window, webview })
+        Ok(Self {
+            window,
+            webview,
+            dark: Cell::new(dark),
+        })
+    }
+
+    /// Switch the blur behind the panel when the appearance setting changes.
+    pub fn set_theme(&self, theme: Theme) {
+        let dark = match theme {
+            Theme::Dark => true,
+            Theme::Light => false,
+            Theme::System => !matches!(self.window.theme(), tao::window::Theme::Light),
+        };
+        if self.dark.get() == dark {
+            return;
+        }
+        self.dark.set(dark);
+        apply_material(&self.window, dark);
     }
 
     pub fn is_visible(&self) -> bool {
@@ -415,9 +507,8 @@ impl Panel {
     }
 
     /// Show the panel anchored under the tray icon, centred on it.
-    pub fn show_under(&self, x: f64, _y: f64, width: f64, _height: f64) {
-        let centre_points = (x + width / 2.0) / self.window.scale_factor();
-        self.reveal(Some(centre_points));
+    pub fn show_under(&self, x: f64, y: f64, width: f64, height: f64) {
+        self.reveal(Some((x + width / 2.0, y + height / 2.0)));
     }
 
     /// Show the panel at the top right; used by the preview mode.
@@ -426,9 +517,9 @@ impl Panel {
     }
 
     /// Order the panel front and put it just under the menu bar.
-    fn reveal(&self, anchor_centre: Option<f64>) {
+    fn reveal(&self, anchor: Option<(f64, f64)>) {
         self.window.set_visible(true);
-        place::under_menu_bar(&self.window, anchor_centre);
+        place::under_menu_bar(&self.window, anchor);
         activate_app();
         self.window.set_focus();
     }

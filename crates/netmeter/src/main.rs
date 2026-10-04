@@ -2,6 +2,7 @@ mod apps;
 mod cli;
 mod icon_text;
 mod instance;
+mod login_item;
 mod menu;
 mod menu_icon;
 mod notify;

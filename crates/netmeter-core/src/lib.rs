@@ -11,7 +11,7 @@ pub mod stats;
 pub mod store;
 pub mod tracker;
 
-pub use config::{Config, Cycle, MenuBarMode, Plan, UnitSystem};
+pub use config::{Appearance, Config, Cycle, MenuBarMode, Plan, Theme, UnitSystem};
 pub use model::{Rate, Traffic};
 pub use stats::Range;
 pub use tracker::Tracker;

@@ -118,6 +118,21 @@ impl Tracker {
         self.store.meta_set("alert_level", &level.to_string())
     }
 
+    /// When recording began, as unix seconds, if anything is stored.
+    ///
+    /// NetMeter only samples while it runs, so this is what the totals actually
+    /// cover — worth saying out loud rather than letting a short total look wrong.
+    pub fn recording_since(&self) -> Option<i64> {
+        self.store.first_timestamp().ok().flatten()
+    }
+
+    /// Forget everything recorded, and the alert state that went with it.
+    pub fn reset_history(&self) -> Result<()> {
+        self.store.reset()?;
+        self.store.meta_delete("alert_cycle")?;
+        self.store.meta_delete("alert_level")
+    }
+
     /// Swap in a config the user just saved.
     pub fn set_config(&mut self, config: Config) {
         self.config = config;
