@@ -31,14 +31,6 @@ if [ ! -e "$target" ]; then
     exit 1
 fi
 
-if [ -z "${MACOS_CERTIFICATE:-}" ]; then
-    echo "--- not signing ---"
-    echo "MACOS_CERTIFICATE is not set, so $target is left unsigned."
-    echo "Downloaders will have to right-click > Open the first time."
-    echo "packaging/macos/SIGNING.md explains how to turn this on."
-    exit 0
-fi
-
 key_file=""
 cleanup() {
     rm -f certificate.p12 notarize.zip
@@ -46,24 +38,43 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "--- importing the certificate ---"
-keychain=netmeter-signing.keychain
-keychain_password=$(openssl rand -hex 16)
-security create-keychain -p "$keychain_password" "$keychain"
-security set-keychain-settings -lut 3600 "$keychain"
-security unlock-keychain -p "$keychain_password" "$keychain"
-printf '%s' "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
-security import certificate.p12 -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" \
-    -T /usr/bin/codesign -T /usr/bin/security
-security set-key-partition-list -S apple-tool:,apple:,codesign: \
-    -s -k "$keychain_password" "$keychain" >/dev/null
-security list-keychains -d user -s "$keychain" $(security list-keychains -d user | sed 's/"//g')
+# Two ways to be signable: a .p12 in the environment (how CI does it, since a
+# runner starts with nothing), or the certificate already sitting in this
+# machine's keychain (how you do it locally, with nothing to export).
+signed_ready=0
+if [ -n "${MACOS_CERTIFICATE:-}" ]; then
+    echo "--- importing the certificate ---"
+    keychain=netmeter-signing.keychain
+    keychain_password=$(openssl rand -hex 16)
+    security create-keychain -p "$keychain_password" "$keychain"
+    security set-keychain-settings -lut 3600 "$keychain"
+    security unlock-keychain -p "$keychain_password" "$keychain"
+    printf '%s' "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+    security import certificate.p12 -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" \
+        -T /usr/bin/codesign -T /usr/bin/security
+    security set-key-partition-list -S apple-tool:,apple:,codesign: \
+        -s -k "$keychain_password" "$keychain" >/dev/null
+    security list-keychains -d user -s "$keychain" $(security list-keychains -d user | sed 's/"//g')
 
-# Fail here, clearly, rather than with a confusing "no identity found" later.
-if ! security find-identity -v -p codesigning "$keychain" | grep -q "$identity"; then
-    echo "error: no '$identity' identity after importing the certificate" >&2
-    security find-identity -v -p codesigning "$keychain" >&2 || true
-    exit 1
+    # Fail here, clearly, rather than with a confusing "no identity found" later.
+    if ! security find-identity -v -p codesigning "$keychain" | grep -q "$identity"; then
+        echo "error: no '$identity' identity after importing the certificate" >&2
+        security find-identity -v -p codesigning "$keychain" >&2 || true
+        exit 1
+    fi
+    signed_ready=1
+elif security find-identity -v -p codesigning 2>/dev/null | grep -q "$identity"; then
+    echo "--- signing with the Developer ID identity already in your keychain ---"
+    signed_ready=1
+fi
+
+if [ "$signed_ready" -eq 0 ]; then
+    echo "--- not signing ---"
+    echo "No '$identity' identity available: MACOS_CERTIFICATE is not set, and"
+    echo "this machine's keychain has no Developer ID certificate either."
+    echo "Downloaders will have to right-click > Open the first time."
+    echo "packaging/macos/SIGNING.md explains how to turn this on."
+    exit 0
 fi
 
 echo "--- signing $target ---"

@@ -35,12 +35,16 @@ echo "--- artifacts ---"
 ls -lh "$dmg" "$zip" | awk '{print $9, $5}'
 
 # Gatekeeper's own answer is the one that matters, so fail the release rather
-# than shipping something it will refuse. Only meaningful once signed.
-if [ -n "${MACOS_CERTIFICATE:-}" ]; then
+# than shipping something it will refuse. Needs --verbose=4: plain `codesign -dv`
+# prints no Authority lines, so a weaker check silently skips this entirely.
+if codesign -dv --verbose=4 "$app" 2>&1 | grep -q "Developer ID"; then
     echo "--- checking what Gatekeeper will say ---"
     spctl -a -vvv -t install "$app"
     xcrun stapler validate "$app"
     xcrun stapler validate "$dmg"
+    echo "--- Gatekeeper accepts it ---"
+else
+    echo "--- skipping the Gatekeeper check: nothing signed this build ---"
 fi
 
 echo "--- hashes (the cask needs the dmg one) ---"
