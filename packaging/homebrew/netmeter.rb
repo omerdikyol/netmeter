@@ -2,7 +2,7 @@ cask "netmeter" do
   version "0.1.0"
   sha256 "c6be43b45e6ddf2c24f3987b2ad893f5e729987983107067cdd98c60432555a8"
 
-  url "https://github.com/omerdikyol/netmeter/releases/download/v#{version}/NetMeter-macos-universal.zip"
+  url "https://github.com/omerdikyol/netmeter/releases/download/v#{version}/NetMeter-macos-universal.dmg"
   name "NetMeter"
   desc "Network usage monitor for the menu bar"
   homepage "https://github.com/omerdikyol/netmeter"

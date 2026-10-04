@@ -23,6 +23,7 @@
   <a href="https://github.com/omerdikyol/netmeter/releases"><img src="https://img.shields.io/github/v/release/omerdikyol/netmeter?label=release&color=4c8dff" alt="Latest release"></a>
   <a href="https://github.com/omerdikyol/netmeter/releases"><img src="https://img.shields.io/github/downloads/omerdikyol/netmeter/total?color=4c8dff" alt="Downloads"></a>
   <a href="https://github.com/omerdikyol/netmeter/actions/workflows/ci.yml"><img src="https://github.com/omerdikyol/netmeter/actions/workflows/ci.yml/badge.svg?branch=main&event=push" alt="CI status"></a>
+  <a href="https://github.com/omerdikyol/netmeter/releases/latest"><img src="https://img.shields.io/badge/Download-.dmg-24292f?logo=apple&logoColor=white" alt="Download for macOS (.dmg)"></a>
   <img src="https://img.shields.io/badge/macOS-13%2B-black?logo=apple&logoColor=white" alt="macOS 13 and newer">
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="MIT or Apache-2.0">
 </p>
@@ -63,9 +64,9 @@ brew tap omerdikyol/netmeter
 brew install --cask netmeter
 ```
 
-Or grab `NetMeter-macos-universal.zip` from
-[Releases](https://github.com/omerdikyol/netmeter/releases), unzip, and drag
-`NetMeter.app` into Applications.
+Or download `NetMeter-macos-universal.dmg` from
+[Releases](https://github.com/omerdikyol/netmeter/releases), open it, and drag
+NetMeter into Applications. There is a `.zip` too, if you prefer.
 
 > **Releases are unsigned for now**, so macOS refuses the first launch of a
 > downloaded copy. Right-click the app and choose **Open**, or clear the flag:

@@ -47,10 +47,16 @@ jobs:
         run: |
           cd dist
           ditto -c -k --keepParent NetMeter.app NetMeter-macos-universal.zip
-          shasum -a 256 NetMeter-macos-universal.zip
+          cd ..
+          packaging/macos/dmg.sh
+          echo "--- hashes ---"
+          shasum -a 256 dist/NetMeter-macos-universal.dmg
+          shasum -a 256 dist/NetMeter-macos-universal.zip
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/NetMeter-macos-universal.zip
+          files: |
+            dist/NetMeter-macos-universal.dmg
+            dist/NetMeter-macos-universal.zip
           generate_release_notes: true
