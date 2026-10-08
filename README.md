@@ -32,6 +32,15 @@
   <img src="docs/screenshots/panel.png" width="330" alt="The NetMeter panel: live rate, graph, totals and per-app usage">
 </p>
 
+## Project entry points
+
+- [Download a release](https://github.com/omerdikyol/netmeter/releases) or use [the Homebrew tap](https://github.com/omerdikyol/homebrew-netmeter).
+- [netmeter-core](crates/netmeter-core/src) contains sampling, persisted state, formatting, and statistics.
+- [The desktop crate](crates/netmeter/src) connects the menu-bar app, per-app sampling, and CLI.
+- [Signing notes](SIGNING.md) explain the current macOS distribution setup.
+
+The core and desktop shell are separate, so the measurement/reporting code can be read independently of the UI. Installation, screenshots, and measurement behavior are documented below.
+
 ## Why another one of these
 
 [Stats](https://github.com/exelban/stats) and iStat Menus already show network
