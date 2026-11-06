@@ -4,253 +4,526 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NetMeter: network usage and data cap in the macOS menu bar</title>
-<meta name="description" content="A small network usage monitor for the macOS menu bar. Live rate, any time range, per-app usage, and how much of your data plan is gone. Free and open source.">
+<meta name="description" content="A small network usage monitor for the macOS menu bar. Live rate, any time range, per-app usage, and how much of your data plan is gone. Try the real panel in your browser.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <meta property="og:title" content="NetMeter">
 <meta property="og:description" content="Network usage and data cap in the macOS menu bar. No root, no kernel extension, nothing uploaded.">
 <meta property="og:image" content="https://omerdikyol.github.io/netmeter/panel.png">
+<script>
+  // Set the theme before first paint so there is no flash.
+  (function () {
+    var saved = localStorage.getItem("theme");
+    var theme = saved || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.classList.add("js");
+    window.__panelTheme = theme;
+  })();
+</script>
 <style>
   /*
     Direction, so later edits stay consistent:
 
-    - The page is built from the app's own material. The hero is the real
-      panel (ui/index.html) running on made-up numbers, under a strip of
-      menu bar, not an illustration of it.
-    - Colour comes from the app: blue is download, orange is upload, and the
-      dark face is the icon's. Blue and orange mean rx/tx here too and are
-      not used for decoration. Buttons are ink, not accent.
-    - One typeface: the system font, because that is what the app is drawn
-      in. Scale 13 / 15 / 17 / 22 / 34.
-    - Copy is the README's: concrete, no invented numbers, no testimonials.
-    - Tabular content (features, requirements) is a table. No card grids,
-      no scroll-in animation. The panel is the only thing that moves.
+    - The page is built around the app's real panel (ui/index.html), running
+      on made-up numbers under a strip of menu bar. The page's job is to get
+      people to touch it, so it is labelled as a live demo, has a pointer hint,
+      and a row of "try" buttons that drive it.
+    - Colour comes from the app: blue is download, orange is upload, the dark
+      face is the icon's. Blue and orange keep that meaning here.
+    - One typeface, the system font, because the app is drawn in it.
+    - Motion: the panel drops from the menu bar like it does on a Mac, the menu
+      bar icon toggles it, sections ease in once, the install tabs slide. All of
+      it is off under prefers-reduced-motion.
+    - Copy is the README's. Numbers in the demo are labelled as samples.
   */
   :root {
     --rx: #4da3ff;
     --tx: #ff9f0a;
-    --ink: #1c1c21;
-    --ink-2: #55555d;
-    --ink-3: #8a8a92;
-    --paper: #f6f6f4;
-    --rule: #e2e2de;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+    --radius: 12px;
+  }
+  [data-theme="light"] {
+    --bg: #f7f7f5;
+    --bg-2: #efefec;
+    --surface: #ffffff;
+    --ink: #17171c;
+    --ink-2: #4f4f58;
+    --ink-3: #85858e;
+    --rule: rgba(20, 20, 30, .09);
     --code: #ecece8;
-    --face: #141418;
-    --face-2: #2c2c33;
+    --bar: rgba(247, 247, 245, .78);
+    --rx-text: #1f74d1;
+    --tx-text: #b45f00;
+    --wall: radial-gradient(120% 90% at 20% 0%, #d7e3f2 0%, transparent 60%),
+            radial-gradient(90% 80% at 100% 100%, #f1e3cf 0%, transparent 55%),
+            #e4e6ea;
+    --shadow: 0 1px 2px rgba(0,0,0,.06), 0 18px 48px -12px rgba(30, 40, 60, .28);
+    --button: #17171c;
+    --button-ink: #fff;
+  }
+  [data-theme="dark"] {
+    --bg: #0e0e11;
+    --bg-2: #141418;
+    --surface: #18181d;
+    --ink: #ededf1;
+    --ink-2: #a8a8b2;
+    --ink-3: #72727c;
+    --rule: rgba(255, 255, 255, .08);
+    --code: #1c1c22;
+    --bar: rgba(14, 14, 17, .72);
+    --rx-text: #6fb4ff;
+    --tx-text: #ffb340;
+    --wall: radial-gradient(120% 90% at 15% 0%, #1b2a40 0%, transparent 60%),
+            radial-gradient(90% 80% at 100% 100%, #33261a 0%, transparent 55%),
+            #15161b;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 24px 64px -16px rgba(0, 0, 0, .7);
+    --button: #ededf1;
+    --button-ink: #111;
   }
   * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 72px; }
   body {
     margin: 0;
-    background: var(--paper);
+    background: var(--bg);
     color: var(--ink);
     font: 15px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+    transition: background-color .35s var(--ease), color .35s var(--ease);
   }
-  a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
-  a:hover { color: var(--ink-2); }
-  :focus-visible { outline: 2px solid var(--rx); outline-offset: 2px; border-radius: 4px; }
-  code, pre { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, monospace; }
-  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+  a { color: inherit; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-decoration-thickness: 1px; text-underline-offset: 3px; transition: text-decoration-color .2s, color .2s; }
+  a:hover { text-decoration-color: currentColor; }
+  :focus-visible { outline: 2px solid var(--rx); outline-offset: 2px; border-radius: 6px; }
+  code, pre { font: 13px/1.6 ui-monospace, "SF Mono", Menlo, monospace; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  .rx { color: var(--rx-text); }
+  .tx { color: var(--tx-text); }
+
+  /* ---------- top bar ---------- */
+  .top {
+    position: sticky; top: 0; z-index: 50;
+    border-bottom: 1px solid transparent;
+    transition: background-color .3s var(--ease), border-color .3s var(--ease), backdrop-filter .3s;
+  }
+  .top.scrolled {
+    background: var(--bar);
+    border-bottom-color: var(--rule);
+    -webkit-backdrop-filter: saturate(1.6) blur(16px);
+    backdrop-filter: saturate(1.6) blur(16px);
+  }
+  .top .wrap { height: 60px; display: flex; align-items: center; gap: 28px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; text-decoration: none; letter-spacing: -.01em; }
+  .brand img { width: 26px; height: 26px; }
+  .nav { display: flex; gap: 22px; margin-left: auto; font-size: 14px; }
+  .nav a { text-decoration: none; color: var(--ink-2); }
+  .nav a:hover { color: var(--ink); }
+  .top-actions { display: flex; align-items: center; gap: 10px; }
+  .icon-btn {
+    width: 36px; height: 36px; display: grid; place-items: center;
+    border: 1px solid var(--rule); border-radius: 10px; background: transparent; color: var(--ink);
+    cursor: pointer; transition: background-color .2s, border-color .2s, transform .2s var(--ease);
+  }
+  .icon-btn:hover { background: var(--bg-2); }
+  .icon-btn:active { transform: scale(.94); }
+  .icon-btn svg { width: 18px; height: 18px; transition: transform .5s var(--ease), opacity .3s; }
+  .theme-toggle { position: relative; }
+  .theme-toggle svg { position: absolute; }
+  [data-theme="dark"] .theme-toggle .sun { opacity: 0; transform: rotate(-90deg) scale(.6); }
+  [data-theme="light"] .theme-toggle .moon { opacity: 0; transform: rotate(90deg) scale(.6); }
+
+  .button {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--button); color: var(--button-ink); text-decoration: none;
+    padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: 14px; border: 0; cursor: pointer;
+    transition: transform .2s var(--ease), box-shadow .2s var(--ease), background-color .35s;
+  }
+  .button:hover { transform: translateY(-1px); box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--button) 60%, transparent); }
+  .button:active { transform: translateY(0); }
+  .button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--rule); }
+  .button.ghost:hover { background: var(--bg-2); box-shadow: none; }
+  .button .arrow { transition: transform .25s var(--ease); }
+  .button:hover .arrow { transform: translateX(3px); }
 
   /* ---------- hero ---------- */
-  .hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 388px;
-    gap: 56px;
-    align-items: start;
-    padding-top: 72px;
-    padding-bottom: 64px;
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 64px; align-items: center; padding-top: 56px; padding-bottom: 88px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); text-decoration: none;
+    border: 1px solid var(--rule); border-radius: 999px; padding: 4px 12px 4px 6px; margin-bottom: 22px;
+    transition: border-color .2s, background-color .2s;
   }
-  .name { display: flex; align-items: center; gap: 14px; margin: 0 0 20px; }
-  .name img { width: 52px; height: 52px; }
-  .name h1 { font-size: 34px; line-height: 1.1; letter-spacing: -0.02em; margin: 0; font-weight: 650; }
-  .lede { font-size: 22px; line-height: 1.4; letter-spacing: -0.01em; margin: 0 0 12px; max-width: 30ch; }
-  .sub { color: var(--ink-2); margin: 0 0 32px; max-width: 46ch; }
-
-  .install { margin: 0 0 14px; }
-  .install-label { font-size: 13px; color: var(--ink-3); margin: 0 0 6px; }
+  .pill:hover { background: var(--bg-2); }
+  .pill b { background: var(--bg-2); color: var(--ink); font-weight: 600; border-radius: 999px; padding: 1px 8px; }
+  h1 { font-size: clamp(36px, 5.2vw, 56px); line-height: 1.04; letter-spacing: -.035em; margin: 0 0 20px; font-weight: 700; max-width: 15ch; }
+  .lede { font-size: 18px; line-height: 1.55; color: var(--ink-2); margin: 0 0 30px; max-width: 46ch; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 26px; }
   .cmd {
-    display: flex; align-items: center; gap: 12px;
-    background: var(--code); border-radius: 8px;
-    padding: 10px 10px 10px 14px; max-width: 460px;
+    display: flex; align-items: flex-start; gap: 12px; max-width: 480px;
+    background: var(--code); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 10px 12px 14px;
+    transition: background-color .35s;
   }
   .cmd code { flex: 1; min-width: 0; white-space: pre; overflow-x: auto; }
   .copy {
-    flex: none; font: inherit; font-size: 13px; cursor: pointer;
-    background: #fff; color: var(--ink); border: 1px solid var(--rule);
-    border-radius: 6px; padding: 3px 10px;
+    flex: none; font: inherit; font-size: 12px; cursor: pointer; min-width: 64px;
+    background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 7px; padding: 3px 10px;
+    transition: background-color .2s, transform .15s;
   }
-  .copy:hover { border-color: var(--ink-3); }
-  .copy:active { background: var(--code); }
+  .copy:active { transform: scale(.95); }
+  .copy.done { color: var(--rx-text); }
+  .meta { font-size: 13px; color: var(--ink-3); margin-top: 12px; }
 
-  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-top: 24px; }
-  .button {
-    display: inline-block; background: var(--ink); color: #fff; text-decoration: none;
-    padding: 9px 16px; border-radius: 8px; font-weight: 550;
+  /* The desktop crop: a strip of menu bar with the real panel hanging under it. */
+  .demo { position: relative; }
+  .live {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font-size: 13px;
   }
-  .button:hover { background: #33333a; color: #fff; }
-  .meta { font-size: 13px; color: var(--ink-3); }
-
-  /* The desktop crop: a strip of menu bar with the panel hanging under it. */
+  .live-badge { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #34c759; position: relative; }
+  .live-dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: #34c759; animation: ping 2s var(--ease) infinite; }
+  @keyframes ping { 0% { transform: scale(1); opacity: .7; } 80%, 100% { transform: scale(2.6); opacity: 0; } }
+  .live-note { color: var(--ink-3); }
   .desk {
-    background: linear-gradient(180deg, #3a3d46, #23252b);
-    border-radius: 12px; overflow: hidden;
-    box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 12px 32px rgba(0,0,0,.14);
+    position: relative; border-radius: 16px; overflow: hidden; background: var(--wall);
+    box-shadow: var(--shadow); outline: 1px solid var(--rule); outline-offset: -1px;
+    transition: box-shadow .35s;
   }
   .menubar {
-    height: 26px; display: flex; align-items: center; justify-content: flex-end; gap: 16px;
-    padding: 0 14px; background: rgba(30, 30, 34, .82); color: rgba(255,255,255,.9);
-    font-size: 13px;
+    height: 28px; display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding: 0 12px;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums;
   }
-  .glyph { display: inline-flex; gap: 2px; align-items: center; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,.16); }
+  .tray {
+    display: inline-flex; align-items: center; gap: 7px; height: 22px; padding: 0 7px; border-radius: 5px;
+    border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
+    transition: background-color .2s;
+  }
+  .tray:hover, .tray[aria-expanded="true"] { background: color-mix(in srgb, var(--ink) 14%, transparent); }
+  .glyph { display: inline-flex; gap: 2px; }
   .glyph i { display: block; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; }
   .glyph .down { border-top: 7px solid var(--rx); }
   .glyph .up { border-bottom: 7px solid var(--tx); }
-  .panel-slot { padding: 6px 24px 24px; display: flex; justify-content: flex-end; }
-  .panel-slot iframe { display: block; width: 340px; height: 524px; border: 0; background: transparent; }
-  .caption { font-size: 13px; color: var(--ink-3); margin: 10px 2px 0; }
+  .tray-rate { font-size: 11.5px; min-width: 9.5em; text-align: left; color: var(--ink-2); }
+  .panel-slot { position: relative; height: 548px; display: flex; justify-content: flex-end; padding: 6px 18px 18px; }
+  .panel-frame { position: relative; transform-origin: 85% 0; transition: opacity .38s var(--ease), transform .45s var(--ease); }
+  .panel-frame iframe { display: block; width: 340px; height: 524px; border: 0; background: transparent; border-radius: 12px; }
+  .js .panel-frame { opacity: 0; transform: translateY(-10px) scale(.97); pointer-events: none; }
+  .js .panel-slot.open .panel-frame { opacity: 1; transform: none; pointer-events: auto; }
+  .closed-hint {
+    position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-2); font-size: 14px;
+    opacity: 0; pointer-events: none; transition: opacity .3s .1s;
+  }
+  .panel-slot:not(.open) .closed-hint { opacity: 1; }
+
+  /* Pointer hint, shown until the first interaction with the panel. */
+  /* Sits just under the panel's range button, which is where the first click should go. */
+  .hint {
+    position: absolute; left: 10px; top: 90px; z-index: 3; pointer-events: none;
+    background: var(--ink); color: var(--bg); font-size: 13px; font-weight: 600;
+    padding: 8px 12px; border-radius: 10px; white-space: nowrap;
+    box-shadow: 0 8px 24px -8px rgba(0,0,0,.45);
+    animation: bob 2.4s var(--ease) infinite; transition: opacity .3s, transform .3s;
+  }
+  .hint::after {
+    content: ""; position: absolute; left: 22px; top: -6px;
+    border: 6px solid transparent; border-top: 0; border-bottom-color: var(--ink);
+  }
+  .hint.gone { opacity: 0; animation: none; transform: translateY(6px); }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
+
+  .tries { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+  .tries span { font-size: 13px; color: var(--ink-3); margin-right: 2px; }
+  .try {
+    font: inherit; font-size: 13px; cursor: pointer; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 999px; padding: 5px 12px;
+    transition: background-color .2s, border-color .2s, transform .2s var(--ease);
+  }
+  .try:hover { border-color: color-mix(in srgb, var(--ink) 30%, transparent); transform: translateY(-1px); }
+  .try:active { transform: translateY(0) scale(.97); }
+  .try.flash { animation: flash .6s var(--ease); }
+  @keyframes flash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--rx) 55%, transparent); } 100% { box-shadow: 0 0 0 10px transparent; } }
+  .caption { font-size: 13px; color: var(--ink-3); margin: 12px 0 0; }
 
   /* ---------- sections ---------- */
-  section { border-top: 1px solid var(--rule); padding: 48px 0; }
-  .cols { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; }
-  h2 { font-size: 17px; line-height: 1.4; margin: 0; font-weight: 650; }
-  .body { max-width: 640px; }
-  .body p { margin: 0 0 14px; }
-  .body p:last-child { margin-bottom: 0; }
-  .body strong { font-weight: 600; }
+  section { padding: 96px 0; border-top: 1px solid var(--rule); }
+  .eyebrow { font-size: 13px; font-weight: 600; color: var(--rx-text); margin: 0 0 10px; }
+  h2 { font-size: clamp(26px, 3.4vw, 36px); line-height: 1.12; letter-spacing: -.025em; margin: 0 0 18px; font-weight: 700; max-width: 20ch; }
+  .intro { color: var(--ink-2); font-size: 17px; max-width: 56ch; margin: 0 0 40px; }
 
-  table { border-collapse: collapse; width: 100%; }
-  th, td { text-align: left; vertical-align: top; padding: 9px 0; border-bottom: 1px solid var(--rule); }
-  th { width: 150px; padding-right: 20px; font-weight: 600; white-space: nowrap; }
-  tr:last-child th, tr:last-child td { border-bottom: 0; }
-  .rx { color: #1f7fe0; } /* --rx darkened for contrast on paper */
-  .tx { color: #c26a00; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+  .pair h3 { font-size: 17px; margin: 0 0 8px; letter-spacing: -.01em; }
+  .pair p { margin: 0; color: var(--ink-2); }
 
-  pre { background: var(--code); border-radius: 8px; padding: 12px 14px; margin: 0 0 14px; overflow-x: auto; }
-  .note { font-size: 13px; color: var(--ink-2); }
-  .shots { display: flex; gap: 20px; flex-wrap: wrap; }
-  .shots figure { margin: 0; }
-  .shots img { width: 260px; height: auto; display: block; border-radius: 10px; }
-  .shots figcaption { font-size: 13px; color: var(--ink-3); margin-top: 6px; }
-
-  footer { border-top: 1px solid var(--rule); padding: 24px 0 40px; font-size: 13px; color: var(--ink-3); }
-  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; }
-
-  @media (max-width: 880px) {
-    .hero { grid-template-columns: minmax(0, 1fr); gap: 40px; padding-top: 40px; }
-    .panel-slot { justify-content: center; padding: 6px 8px 12px; }
-    .cols { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-    .lede { font-size: 20px; }
+  /* Data cap illustration: a sample plan, filling in when it scrolls into view. */
+  .cap {
+    margin-top: 56px; padding: 28px; border-radius: var(--radius); background: var(--bg-2); border: 1px solid var(--rule);
   }
-  @media (max-width: 400px) {
-    .panel-slot iframe { zoom: .86; }
-    th { width: auto; white-space: normal; }
+  .cap-top { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+  .cap-num { font-size: 28px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .cap-num small { font-size: 15px; font-weight: 500; color: var(--ink-3); }
+  .cap-side { font-size: 13px; color: var(--ink-3); }
+  .cap-track { position: relative; height: 10px; border-radius: 99px; background: color-mix(in srgb, var(--ink) 9%, transparent); }
+  .cap-fill {
+    position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 99px; background: var(--rx);
+    transition: width 1.6s var(--ease);
+  }
+  .cap.in .cap-fill { width: 65.4%; }
+  .cap-mark { position: absolute; top: -6px; bottom: -6px; width: 2px; background: var(--ink-3); border-radius: 1px; }
+  .cap-mark span { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+  .cap-mark.end span { left: auto; right: 0; transform: none; }
+  .cap-foot { margin-top: 34px; font-size: 13px; color: var(--ink-3); }
+
+  .features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
+  .feature { padding: 18px 0; border-top: 1px solid var(--rule); display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 16px; }
+  .feature dt { font-weight: 600; }
+  .feature dd { margin: 0; color: var(--ink-2); }
+
+  .shots { display: flex; gap: 28px; justify-content: center; flex-wrap: wrap; }
+  .shots figure { margin: 0; }
+  .shots img {
+    width: 300px; max-width: 100%; height: auto; display: block; border-radius: 14px; box-shadow: var(--shadow);
+    transition: transform .4s var(--ease);
+  }
+  .shots figure:hover img { transform: translateY(-4px) rotate(-.4deg); }
+  .shots figcaption { font-size: 13px; color: var(--ink-3); margin-top: 12px; text-align: center; }
+
+  /* Install tabs */
+  .tabs { position: relative; display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--rule); margin-bottom: 20px; }
+  .tab { position: relative; z-index: 1; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink-2); background: none; border: 0; padding: 7px 14px; border-radius: 9px; cursor: pointer; transition: color .25s; }
+  .tab[aria-selected="true"] { color: var(--ink); }
+  .tab-ink { position: absolute; top: 4px; bottom: 4px; border-radius: 9px; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.12); transition: left .35s var(--ease), width .35s var(--ease); }
+  .panes { position: relative; max-width: 680px; }
+  .pane { display: none; }
+  .pane.active { display: block; animation: paneIn .35s var(--ease); }
+  @keyframes paneIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  pre { background: var(--code); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; margin: 0 0 14px; overflow-x: auto; }
+  .note { font-size: 14px; color: var(--ink-2); max-width: 64ch; }
+
+  .notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+  .notes h3 { font-size: 15px; margin: 0 0 6px; }
+  .notes p { margin: 0; font-size: 14px; color: var(--ink-2); }
+
+  .cta { text-align: center; }
+  .cta h2 { margin-left: auto; margin-right: auto; }
+  .cta .actions { justify-content: center; }
+
+  footer { border-top: 1px solid var(--rule); padding: 28px 0 44px; font-size: 13px; color: var(--ink-3); }
+  footer .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; }
+  footer .brand { color: var(--ink); margin-right: auto; }
+
+  /* Sections ease in once. Without JS, or with reduced motion, they are just there. */
+  .js .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
+  .js .reveal.in { opacity: 1; transform: none; }
+
+  @media (max-width: 960px) {
+    .hero { grid-template-columns: minmax(0, 1fr); gap: 48px; padding-top: 32px; }
+    .demo { max-width: 440px; }
+    .nav { display: none; }
+    .top-actions { margin-left: auto; }
+    .pair, .features, .notes { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+    .features { gap: 0; }
+    section { padding: 72px 0; }
+  }
+  @media (max-width: 480px) {
+    .panel-slot { justify-content: center; padding: 6px 4px 12px; height: auto; }
+    .panel-frame iframe { zoom: .86; }
+    .hint { top: 78px; left: 8px; }
+    .top .download-top { display: none; }
+    .feature { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    .tray-rate { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .js .reveal { opacity: 1; transform: none; }
+    html { scroll-behavior: auto; }
   }
 </style>
 </head>
 <body>
+<header class="top" id="top">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="icon.svg" alt=""> NetMeter</a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#try">Try it</a>
+      <a href="#why">Why</a>
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/omerdikyol/netmeter/blob/main/CHANGELOG.md">Changelog</a>
+    </nav>
+    <div class="top-actions">
+      <a class="icon-btn" href="https://github.com/omerdikyol/netmeter" aria-label="NetMeter on GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+      <button class="icon-btn theme-toggle" id="theme" type="button" aria-label="Switch between light and dark">
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+      </button>
+      <a class="button download-top" href="https://github.com/omerdikyol/netmeter/releases/latest/download/NetMeter-macos-universal.dmg">Download</a>
+    </div>
+  </div>
+</header>
+
 <main>
   <div class="wrap hero">
     <div>
-      <div class="name">
-        <img src="icon.svg" alt="">
-        <h1>NetMeter</h1>
+      <a class="pill" href="https://github.com/omerdikyol/netmeter/blob/main/CHANGELOG.md"><b>v0.1.1</b> Free and open source</a>
+      <h1>Know how much of your data plan is left.</h1>
+      <p class="lede">NetMeter lives in the macOS menu bar and shows the live rate, any time range, per-app usage, and progress against your monthly cap. It needs no root, no kernel extension and no special permissions.</p>
+      <div class="actions">
+        <a class="button" href="https://github.com/omerdikyol/netmeter/releases/latest/download/NetMeter-macos-universal.dmg">Download for Mac <span class="arrow" aria-hidden="true">→</span></a>
+        <a class="button ghost" href="#try" id="try-link">Try it in your browser</a>
       </div>
-      <p class="lede">How much of your data plan is gone, from the menu bar.</p>
-      <p class="sub">A small network monitor for macOS: live rate, any time range,
-        per-app usage, and progress against your monthly cap. It needs no root,
-        no kernel extension and no Accessibility permission.</p>
-
-      <div class="install">
-        <p class="install-label">Install with Homebrew</p>
-        <div class="cmd">
-          <code id="brew">brew tap omerdikyol/netmeter
+      <div class="cmd">
+        <code id="brew">brew tap omerdikyol/netmeter
 brew trust omerdikyol/netmeter
 brew install --cask netmeter</code>
-          <button class="copy" type="button" data-copy="brew">Copy</button>
-        </div>
+        <button class="copy" type="button" data-copy="brew">Copy</button>
       </div>
-
-      <div class="actions">
-        <a class="button" href="https://github.com/omerdikyol/netmeter/releases/latest/download/NetMeter-macos-universal.dmg">Download the .dmg</a>
-        <a href="https://github.com/omerdikyol/netmeter">Source on GitHub</a>
-        <span class="meta">Version 0.1.1 · macOS 13+ · Apple silicon and Intel · signed and notarized</span>
-      </div>
+      <p class="meta">macOS 13 or newer · Apple silicon and Intel · signed and notarized</p>
     </div>
 
-    <div>
+    <div class="demo" id="try">
+      <div class="live">
+        <span class="live-badge"><span class="live-dot" aria-hidden="true"></span>Live demo, try it</span>
+        <span class="live-note">sample data</span>
+      </div>
       <div class="desk">
-        <div class="menubar" aria-hidden="true">
-          <span class="glyph"><i class="down"></i><i class="up"></i></span>
+        <div class="menubar">
+          <button class="tray" id="tray" type="button" aria-expanded="true" aria-controls="panel-slot" title="Click to open or close the panel, like on a Mac">
+            <span class="glyph" aria-hidden="true"><i class="down"></i><i class="up"></i></span>
+            <span class="tray-rate" id="tray-rate" aria-hidden="true"></span>
+          </button>
           <span id="clock"></span>
         </div>
-        <div class="panel-slot">
-          <iframe src="panel.html" title="The NetMeter panel, running on sample data" loading="eager"></iframe>
+        <div class="panel-slot" id="panel-slot">
+          <div class="panel-frame">
+            <iframe id="panel" src="panel.html" title="Interactive NetMeter panel running on sample data" loading="eager"></iframe>
+            <div class="hint" id="hint" aria-hidden="true">Click to change the range</div>
+          </div>
+          <div class="closed-hint">Click the menu bar icon to open the panel</div>
         </div>
       </div>
-      <p class="caption">This is the app's real panel, running in your browser on made-up traffic. Try the ranges, drag across the graph, or open settings.</p>
+      <div class="tries" role="group" aria-label="Things to try in the panel">
+        <span>Try:</span>
+        <button class="try" type="button" data-try="7d">Last 7 days</button>
+        <button class="try" type="button" data-try="cycle">Billing cycle</button>
+        <button class="try" type="button" data-try="interfaces">Per interface</button>
+        <button class="try" type="button" data-try="settings">Settings</button>
+      </div>
+      <p class="caption">This is NetMeter's real panel, running in your browser on made-up traffic. Everything in it works: drag across the graph to zoom, or change the data cap in settings.</p>
     </div>
   </div>
 
-  <section>
-    <div class="wrap cols">
-      <h2>Why another one</h2>
-      <div class="body">
-        <p><a href="https://github.com/exelban/stats">Stats</a> and iStat Menus already show network traffic. NetMeter differs in two ways.</p>
-        <p><strong>It is built around a data cap.</strong> Set your plan's size and reset day, and the panel shows how much of it is gone and when it renews, with notifications as you cross the thresholds you picked.</p>
-        <p><strong>It needs no privileges.</strong> It reads the same per-interface counters Activity Monitor does, and <code>nettop</code> for per-app numbers. History is a SQLite file on your Mac. There are no accounts and nothing is uploaded.</p>
+  <section id="why">
+    <div class="wrap">
+      <div class="reveal">
+        <p class="eyebrow">Why another one</p>
+        <h2>Built around a data cap, with nothing to grant.</h2>
+        <p class="intro"><a href="https://github.com/exelban/stats">Stats</a> and iStat Menus already show network traffic. NetMeter is for when the question is not how fast, but how much is left.</p>
+      </div>
+      <div class="pair reveal">
+        <div>
+          <h3>It is built around a data cap</h3>
+          <p>Set your plan's size and reset day, and the panel shows how much of it is gone and when it renews, with notifications as you cross the thresholds you picked.</p>
+        </div>
+        <div>
+          <h3>It needs no privileges</h3>
+          <p>No Accessibility permission, no root, no kernel extension, no network filter. It reads the same per-interface counters Activity Monitor does, and <code>nettop</code> for per-app numbers.</p>
+        </div>
+      </div>
+      <div class="cap reveal" id="cap" aria-label="Example: 32.7 GB of a 50 GB plan used">
+        <div class="cap-top">
+          <span class="cap-num">32.7 GB <small>of 50 GB this cycle</small></span>
+          <span class="cap-side">Example plan · resets on the 1st</span>
+        </div>
+        <div class="cap-track">
+          <div class="cap-fill"></div>
+          <div class="cap-mark" style="left: 80%"><span>alert at 80%</span></div>
+          <div class="cap-mark end" style="left: calc(100% - 2px)"><span>100%</span></div>
+        </div>
+        <p class="cap-foot">Pick the thresholds you care about. NetMeter sends a notification as the cycle crosses each one.</p>
       </div>
     </div>
   </section>
 
-  <section>
-    <div class="wrap cols">
-      <h2>What it shows</h2>
-      <div class="body">
-        <table>
-          <tr><th>Live rate</th><td><span class="rx">Download</span> and <span class="tx">upload</span>, updated every second</td></tr>
-          <tr><th>Any time range</th><td>1H, 6H, 12H, 24H, 7D, 30D, Today, Cycle, an explicit From–To picker, or drag across the graph to zoom</td></tr>
-          <tr><th>Per app</th><td>The busiest processes since launch, or per-interface totals for the selected range</td></tr>
-          <tr><th>Data cap</th><td>Progress against your plan, a reset day, and threshold notifications</td></tr>
-          <tr><th>Menu bar</th><td>A quiet activity glyph, the live rate, or the cycle total</td></tr>
-          <tr><th>Appearance</th><td>Light, dark, or follow the system, with a panel opacity slider</td></tr>
-          <tr><th>Command line</th><td><code>netmeter report --range cycle</code> and friends, reading the same history</td></tr>
-        </table>
+  <section id="features">
+    <div class="wrap">
+      <div class="reveal">
+        <p class="eyebrow">What it shows</p>
+        <h2>Everything you need, in one small panel.</h2>
       </div>
-    </div>
-  </section>
-
-  <section>
-    <div class="wrap cols">
-      <h2>Screenshots</h2>
-      <div class="body shots">
+      <dl class="features reveal">
+        <div class="feature"><dt>Live rate</dt><dd><span class="rx">Download</span> and <span class="tx">upload</span>, updated every second</dd></div>
+        <div class="feature"><dt>Any time range</dt><dd>1H to 30D, Today, Cycle, a From–To picker, or drag across the graph to zoom</dd></div>
+        <div class="feature"><dt>Per app</dt><dd>The busiest processes since launch, or per-interface totals for the range</dd></div>
+        <div class="feature"><dt>Data cap</dt><dd>Progress against your plan, a reset day, and threshold notifications</dd></div>
+        <div class="feature"><dt>Menu bar</dt><dd>A quiet activity glyph, the live rate, or the cycle total</dd></div>
+        <div class="feature"><dt>Appearance</dt><dd>Light, dark, or follow the system, with a panel opacity slider</dd></div>
+        <div class="feature"><dt>Private</dt><dd>A SQLite file on your Mac. No accounts, nothing uploaded</dd></div>
+        <div class="feature"><dt>Command line</dt><dd><code>netmeter report --range cycle</code> reads the same history</dd></div>
+      </dl>
+      <div class="shots reveal" style="margin-top: 64px">
         <figure><img src="range.png" alt="The range picker with quick chips and a custom From and To" loading="lazy" width="680" height="1048"><figcaption>Choosing a time range</figcaption></figure>
         <figure><img src="settings.png" alt="Settings: data cap, alerts, menu bar and units" loading="lazy" width="680" height="1048"><figcaption>Settings</figcaption></figure>
       </div>
     </div>
   </section>
 
-  <section>
-    <div class="wrap cols">
-      <h2>Other ways to install</h2>
-      <div class="body">
-        <p>Download <a href="https://github.com/omerdikyol/netmeter/releases/latest">the .dmg or .zip from Releases</a>, open it, and drag NetMeter into Applications. Or build it from source with Rust 1.80 or newer:</p>
-        <pre><code>git clone https://github.com/omerdikyol/netmeter
+  <section id="install">
+    <div class="wrap">
+      <div class="reveal">
+        <p class="eyebrow">Install</p>
+        <h2>Running in under a minute.</h2>
+      </div>
+      <div class="reveal">
+        <div class="tabs" role="tablist" aria-label="Ways to install">
+          <span class="tab-ink" aria-hidden="true"></span>
+          <button class="tab" role="tab" aria-selected="true" aria-controls="pane-brew" id="tab-brew">Homebrew</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="pane-dmg" id="tab-dmg" tabindex="-1">Download</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="pane-src" id="tab-src" tabindex="-1">From source</button>
+        </div>
+        <div class="panes">
+          <div class="pane active" id="pane-brew" role="tabpanel" aria-labelledby="tab-brew">
+            <pre><code>brew tap omerdikyol/netmeter
+brew trust omerdikyol/netmeter   # Homebrew asks for third-party taps to be trusted
+brew install --cask netmeter</code></pre>
+          </div>
+          <div class="pane" id="pane-dmg" role="tabpanel" aria-labelledby="tab-dmg">
+            <p class="note" style="margin-top: 0">Download <a href="https://github.com/omerdikyol/netmeter/releases/latest/download/NetMeter-macos-universal.dmg">NetMeter-macos-universal.dmg</a>, open it, and drag NetMeter into Applications. There is a <a href="https://github.com/omerdikyol/netmeter/releases/latest">.zip on the releases page</a> too. Builds are signed and notarized, so it opens normally.</p>
+          </div>
+          <div class="pane" id="pane-src" role="tabpanel" aria-labelledby="tab-src">
+            <pre><code>git clone https://github.com/omerdikyol/netmeter
 cd netmeter
-cargo build --release
+cargo build --release          # Rust 1.80 or newer
 packaging/macos/bundle.sh
 open dist/NetMeter.app</code></pre>
+          </div>
+        </div>
         <p class="note">Left-click the menu bar icon for the panel, right-click for Settings and Quit. If you use a menu bar manager such as Ice or Bartender and the icon does not appear, move NetMeter to the always-visible section.</p>
       </div>
     </div>
   </section>
 
   <section>
-    <div class="wrap cols">
-      <h2>Good to know</h2>
-      <div class="body">
-        <p>NetMeter only counts while it is running, so totals cover that time and the panel says since when. Turn on launch at login to avoid gaps. Per-app numbers come from <code>nettop</code> and cover only what happened while the app was open.</p>
-        <p>It is macOS only for now. The core crate (sampling, storage, statistics) is platform-neutral; the panel's webview needs work on Linux and Windows has not been tried.</p>
+    <div class="wrap notes reveal">
+      <div>
+        <h3>Counts while it runs</h3>
+        <p>Totals cover the time NetMeter was open, and the panel says since when. Turn on launch at login to avoid gaps.</p>
+      </div>
+      <div>
+        <h3>Honest per-app numbers</h3>
+        <p>Per-app usage comes from <code>nettop</code>, sampled and diffed, so it only counts what happened while the app was running.</p>
+      </div>
+      <div>
+        <h3>macOS only, for now</h3>
+        <p>The core crate is platform-neutral. The panel's webview needs work on Linux, and Windows has not been tried.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="wrap reveal">
+      <h2>Keep an eye on your plan.</h2>
+      <div class="actions">
+        <a class="button" href="https://github.com/omerdikyol/netmeter/releases/latest/download/NetMeter-macos-universal.dmg">Download for Mac <span class="arrow" aria-hidden="true">→</span></a>
+        <a class="button ghost" href="https://github.com/omerdikyol/netmeter">View on GitHub</a>
       </div>
     </div>
   </section>
@@ -258,29 +531,152 @@ open dist/NetMeter.app</code></pre>
 
 <footer>
   <div class="wrap">
-    <span>NetMeter is free software under MIT or Apache-2.0.</span>
-    <a href="https://github.com/omerdikyol/netmeter">GitHub</a>
+    <a class="brand" href="#"><img src="icon.svg" alt=""> NetMeter</a>
+    <span>MIT or Apache-2.0</span>
     <a href="https://github.com/omerdikyol/netmeter/blob/main/CHANGELOG.md">Changelog</a>
     <a href="https://github.com/omerdikyol/netmeter/issues">Report an issue</a>
   </div>
 </footer>
 
 <script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var root = document.documentElement;
+  var frame = $("panel"), slot = $("panel-slot"), tray = $("tray"), hint = $("hint");
+
+  /* ---------- top bar ---------- */
+  var top = $("top");
+  function onScroll() { top.classList.toggle("scrolled", window.scrollY > 8); }
+  addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  /* ---------- theme: the page and the panel switch together ---------- */
+  function panelApi() { try { return frame.contentWindow.netmeterDemo; } catch (e) { return null; } }
+  $("theme").addEventListener("click", function () {
+    var next = root.dataset.theme === "dark" ? "light" : "dark";
+    root.dataset.theme = next;
+    window.__panelTheme = next;
+    localStorage.setItem("theme", next);
+    var api = panelApi();
+    if (api) api.setTheme(next);
+  });
+
+  /* ---------- copy ---------- */
   document.querySelectorAll("[data-copy]").forEach(function (button) {
     button.addEventListener("click", function () {
-      var text = document.getElementById(button.dataset.copy).textContent;
-      navigator.clipboard.writeText(text).then(function () {
+      navigator.clipboard.writeText($(button.dataset.copy).textContent).then(function () {
         button.textContent = "Copied";
-        setTimeout(function () { button.textContent = "Copy"; }, 1500);
+        button.classList.add("done");
+        setTimeout(function () { button.textContent = "Copy"; button.classList.remove("done"); }, 1600);
       });
     });
   });
-  var clock = document.getElementById("clock");
-  function tick() {
-    clock.textContent = new Date().toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+
+  /* ---------- the panel: open from the menu bar, like the app ---------- */
+  function setOpen(open) {
+    slot.classList.toggle("open", open);
+    tray.setAttribute("aria-expanded", String(open));
+    frame.tabIndex = open ? 0 : -1;
   }
+  frame.addEventListener("load", function () {
+    setTimeout(function () { setOpen(true); }, 250);
+    var doc = frame.contentDocument;
+    if (!doc) return;
+    // The hint goes away the first time someone touches the panel.
+    doc.addEventListener("pointerdown", dismissHint, { once: true });
+    doc.addEventListener("keydown", dismissHint, { once: true });
+  });
+  tray.addEventListener("click", function () { dismissHint(); setOpen(!slot.classList.contains("open")); });
+  function dismissHint() { hint.classList.add("gone"); }
+
+  /* Menu bar mirrors the panel's live rate. */
+  function rate(b) {
+    var units = ["B/s", "KB/s", "MB/s", "GB/s"], i = 0;
+    while (b >= 1000 && i < units.length - 1) { b /= 1000; i++; }
+    return (b >= 100 || i === 0 ? Math.round(b) : b.toFixed(1)) + " " + units[i];
+  }
+  addEventListener("message", function (e) {
+    if (e.source !== frame.contentWindow || !e.data || e.data.netmeter !== "rate") return;
+    $("tray-rate").textContent = "↓ " + rate(e.data.rx) + "  ↑ " + rate(e.data.tx);
+  });
+
+  /* "Try" buttons drive the real panel's own controls. */
+  function inPanel(fn) {
+    var doc = frame.contentDocument;
+    if (!doc) return;
+    if (!slot.classList.contains("open")) setOpen(true);
+    var settings = doc.getElementById("settings");
+    if (settings && settings.classList.contains("open")) doc.getElementById("settings-back").click();
+    fn(doc);
+  }
+  var tries = {
+    "7d": function (doc) { doc.querySelector('.chip[data-key="7d"]').click(); },
+    cycle: function (doc) { doc.querySelector('.chip[data-key="cycle"]').click(); },
+    interfaces: function (doc) {
+      var buttons = doc.querySelectorAll("#modes button");
+      var target = Array.prototype.find.call(buttons, function (b) { return /interface/i.test(b.textContent); });
+      (target || buttons[buttons.length - 1]).click();
+    },
+    settings: function (doc) { doc.getElementById("settings-btn").click(); }
+  };
+  document.querySelectorAll("[data-try]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      dismissHint();
+      inPanel(tries[button.dataset.try]);
+      button.classList.remove("flash");
+      void button.offsetWidth;
+      button.classList.add("flash");
+    });
+  });
+
+  /* "Try it in your browser": scroll to the panel and nudge it. */
+  $("try-link").addEventListener("click", function () {
+    setTimeout(function () { setOpen(false); setTimeout(function () { setOpen(true); }, 260); }, 350);
+  });
+
+  /* ---------- clock ---------- */
+  function tick() { $("clock").textContent = new Date().toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }); }
   tick();
   setInterval(tick, 15000);
+
+  /* ---------- install tabs with a sliding indicator ---------- */
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
+  var ink = document.querySelector(".tab-ink");
+  function moveInk(tab) { ink.style.left = tab.offsetLeft + "px"; ink.style.width = tab.offsetWidth + "px"; }
+  function select(tab, focus) {
+    tabs.forEach(function (t) {
+      var on = t === tab;
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
+      $(t.getAttribute("aria-controls")).classList.toggle("active", on);
+    });
+    moveInk(tab);
+    if (focus) tab.focus();
+  }
+  tabs.forEach(function (tab, i) {
+    tab.addEventListener("click", function () { select(tab); });
+    tab.addEventListener("keydown", function (e) {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      select(tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length], true);
+    });
+  });
+  moveInk(tabs[0]);
+  addEventListener("resize", function () { moveInk(document.querySelector('.tab[aria-selected="true"]')); });
+
+  /* ---------- sections ease in once ---------- */
+  if (!("IntersectionObserver" in window)) {
+    document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("in"); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add("in");
+      io.unobserve(entry.target);
+    });
+  }, { rootMargin: "0px 0px -10% 0px" });
+  document.querySelectorAll(".reveal").forEach(function (el) { io.observe(el); });
+})();
 </script>
 </body>
 </html>

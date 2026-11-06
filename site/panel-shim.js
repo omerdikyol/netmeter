@@ -10,7 +10,7 @@
     month: "This month", cycle: "Billing cycle", custom: "Custom range"
   };
   var APPS = [["Safari", 0.43], ["Xcode", 0.22], ["Slack", 0.09], ["Dropbox", 0.07], ["Mail", 0.02], ["Music", 0.01]];
-  var settings = { unit: "auto", menuBar: "icon", theme: "dark", opacity: 1, launchAtLogin: true,
+  var settings = { unit: "auto", menuBar: "icon", theme: window.parent.__panelTheme || "dark", opacity: 1, launchAtLogin: true,
     plan: { enabled: true, cap: 50 * GB, cycle: "monthly", resetDay: 1, warnAt: [0.8, 1.0] } };
   var current = { range: "today", custom: null };
 
@@ -100,6 +100,17 @@
       setTimeout(push, 0);
     }
   };
-  setInterval(function () { if (window.netmeter) window.netmeter.rate(rate()); }, 1000);
+  // The website's menu bar mirrors the live rate, and its theme switch drives the panel's.
+  function tellParent(r) {
+    if (window.parent !== window) window.parent.postMessage({ netmeter: "rate", rx: r.rx, tx: r.tx }, location.origin);
+  }
+  window.netmeterDemo = {
+    setTheme: function (theme) { settings.theme = theme; push(); }
+  };
+  setInterval(function () {
+    var r = rate();
+    if (window.netmeter) window.netmeter.rate(r);
+    tellParent(r);
+  }, 1000);
   setInterval(push, 30000);
 })();
