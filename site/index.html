@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetMeter: network usage and data cap in the macOS menu bar</title>
+<meta name="description" content="A small network usage monitor for the macOS menu bar. Live rate, any time range, per-app usage, and how much of your data plan is gone. Free and open source.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta property="og:title" content="NetMeter">
+<meta property="og:description" content="Network usage and data cap in the macOS menu bar. No root, no kernel extension, nothing uploaded.">
+<meta property="og:image" content="https://omerdikyol.github.io/netmeter/panel.png">
+<style>
+  /*
+    Direction, so later edits stay consistent:
+
+    - The page is built from the app's own material. The hero is the real
+      panel (ui/index.html) running on made-up numbers, under a strip of
+      menu bar, not an illustration of it.
+    - Colour comes from the app: blue is download, orange is upload, and the
+      dark face is the icon's. Blue and orange mean rx/tx here too and are
+      not used for decoration. Buttons are ink, not accent.
+    - One typeface: the system font, because that is what the app is drawn
+      in. Scale 13 / 15 / 17 / 22 / 34.
+    - Copy is the README's: concrete, no invented numbers, no testimonials.
+    - Tabular content (features, requirements) is a table. No card grids,
+      no scroll-in animation. The panel is the only thing that moves.
+  */
+  :root {
+    --rx: #4da3ff;
+    --tx: #ff9f0a;
+    --ink: #1c1c21;
+    --ink-2: #55555d;
+    --ink-3: #8a8a92;
+    --paper: #f6f6f4;
+    --rule: #e2e2de;
+    --code: #ecece8;
+    --face: #141418;
+    --face-2: #2c2c33;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  a:hover { color: var(--ink-2); }
+  :focus-visible { outline: 2px solid var(--rx); outline-offset: 2px; border-radius: 4px; }
+  code, pre { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, monospace; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 388px;
+    gap: 56px;
+    align-items: start;
+    padding-top: 72px;
+    padding-bottom: 64px;
+  }
+  .name { display: flex; align-items: center; gap: 14px; margin: 0 0 20px; }
+  .name img { width: 52px; height: 52px; }
+  .name h1 { font-size: 34px; line-height: 1.1; letter-spacing: -0.02em; margin: 0; font-weight: 650; }
+  .lede { font-size: 22px; line-height: 1.4; letter-spacing: -0.01em; margin: 0 0 12px; max-width: 30ch; }
+  .sub { color: var(--ink-2); margin: 0 0 32px; max-width: 46ch; }
+
+  .install { margin: 0 0 14px; }
+  .install-label { font-size: 13px; color: var(--ink-3); margin: 0 0 6px; }
+  .cmd {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--code); border-radius: 8px;
+    padding: 10px 10px 10px 14px; max-width: 460px;
+  }
+  .cmd code { flex: 1; min-width: 0; white-space: pre; overflow-x: auto; }
+  .copy {
+    flex: none; font: inherit; font-size: 13px; cursor: pointer;
+    background: #fff; color: var(--ink); border: 1px solid var(--rule);
+    border-radius: 6px; padding: 3px 10px;
+  }
+  .copy:hover { border-color: var(--ink-3); }
+  .copy:active { background: var(--code); }
+
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-top: 24px; }
+  .button {
+    display: inline-block; background: var(--ink); color: #fff; text-decoration: none;
+    padding: 9px 16px; border-radius: 8px; font-weight: 550;
+  }
+  .button:hover { background: #33333a; color: #fff; }
+  .meta { font-size: 13px; color: var(--ink-3); }
+
+  /* The desktop crop: a strip of menu bar with the panel hanging under it. */
+  .desk {
+    background: linear-gradient(180deg, #3a3d46, #23252b);
+    border-radius: 12px; overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 12px 32px rgba(0,0,0,.14);
+  }
+  .menubar {
+    height: 26px; display: flex; align-items: center; justify-content: flex-end; gap: 16px;
+    padding: 0 14px; background: rgba(30, 30, 34, .82); color: rgba(255,255,255,.9);
+    font-size: 13px;
+  }
+  .glyph { display: inline-flex; gap: 2px; align-items: center; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,.16); }
+  .glyph i { display: block; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; }
+  .glyph .down { border-top: 7px solid var(--rx); }
+  .glyph .up { border-bottom: 7px solid var(--tx); }
+  .panel-slot { padding: 6px 24px 24px; display: flex; justify-content: flex-end; }
+  .panel-slot iframe { display: block; width: 340px; height: 524px; border: 0; background: transparent; }
+  .caption { font-size: 13px; color: var(--ink-3); margin: 10px 2px 0; }
+
+  /* ---------- sections ---------- */
+  section { border-top: 1px solid var(--rule); padding: 48px 0; }
+  .cols { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; }
+  h2 { font-size: 17px; line-height: 1.4; margin: 0; font-weight: 650; }
+  .body { max-width: 640px; }
+  .body p { margin: 0 0 14px; }
+  .body p:last-child { margin-bottom: 0; }
+  .body strong { font-weight: 600; }
+
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+  th { width: 150px; padding-right: 20px; font-weight: 600; white-space: nowrap; }
+  tr:last-child th, tr:last-child td { border-bottom: 0; }
+  .rx { color: #1f7fe0; } /* --rx darkened for contrast on paper */
+  .tx { color: #c26a00; }
+
+  pre { background: var(--code); border-radius: 8px; padding: 12px 14px; margin: 0 0 14px; overflow-x: auto; }
+  .note { font-size: 13px; color: var(--ink-2); }
+  .shots { display: flex; gap: 20px; flex-wrap: wrap; }
+  .shots figure { margin: 0; }
+  .shots img { width: 260px; height: auto; display: block; border-radius: 10px; }
+  .shots figcaption { font-size: 13px; color: var(--ink-3); margin-top: 6px; }
+
+  footer { border-top: 1px solid var(--rule); padding: 24px 0 40px; font-size: 13px; color: var(--ink-3); }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+
+  @media (max-width: 880px) {
+    .hero { grid-template-columns: minmax(0, 1fr); gap: 40px; padding-top: 40px; }
+    .panel-slot { justify-content: center; padding: 6px 8px 12px; }
+    .cols { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+    .lede { font-size: 20px; }
+  }
+  @media (max-width: 400px) {
+    .panel-slot iframe { zoom: .86; }
+    th { width: auto; white-space: normal; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap hero">
+    <div>
+      <div class="name">
+        <img src="icon.svg" alt="">
+        <h1>NetMeter</h1>
+      </div>
+      <p class="lede">How much of your data plan is gone, from the menu bar.</p>
+      <p class="sub">A small network monitor for macOS: live rate, any time range,
+        per-app usage, and progress against your monthly cap. It needs no root,
+        no kernel extension and no Accessibility permission.</p>
+
+      <div class="install">
+        <p class="install-label">Install with Homebrew</p>
+        <div class="cmd">
+          <code id="brew">brew tap omerdikyol/netmeter
+brew trust omerdikyol/netmeter
+brew install --cask netmeter</code>
+          <button class="copy" type="button" data-copy="brew">Copy</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <a class="button" href="https://github.com/omerdikyol/netmeter/releases/latest/download/NetMeter-macos-universal.dmg">Download the .dmg</a>
+        <a href="https://github.com/omerdikyol/netmeter">Source on GitHub</a>
+        <span class="meta">Version 0.1.1 · macOS 13+ · Apple silicon and Intel · signed and notarized</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="desk">
+        <div class="menubar" aria-hidden="true">
+          <span class="glyph"><i class="down"></i><i class="up"></i></span>
+          <span id="clock"></span>
+        </div>
+        <div class="panel-slot">
+          <iframe src="panel.html" title="The NetMeter panel, running on sample data" loading="eager"></iframe>
+        </div>
+      </div>
+      <p class="caption">This is the app's real panel, running in your browser on made-up traffic. Try the ranges, drag across the graph, or open settings.</p>
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap cols">
+      <h2>Why another one</h2>
+      <div class="body">
+        <p><a href="https://github.com/exelban/stats">Stats</a> and iStat Menus already show network traffic. NetMeter differs in two ways.</p>
+        <p><strong>It is built around a data cap.</strong> Set your plan's size and reset day, and the panel shows how much of it is gone and when it renews, with notifications as you cross the thresholds you picked.</p>
+        <p><strong>It needs no privileges.</strong> It reads the same per-interface counters Activity Monitor does, and <code>nettop</code> for per-app numbers. History is a SQLite file on your Mac. There are no accounts and nothing is uploaded.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap cols">
+      <h2>What it shows</h2>
+      <div class="body">
+        <table>
+          <tr><th>Live rate</th><td><span class="rx">Download</span> and <span class="tx">upload</span>, updated every second</td></tr>
+          <tr><th>Any time range</th><td>1H, 6H, 12H, 24H, 7D, 30D, Today, Cycle, an explicit From–To picker, or drag across the graph to zoom</td></tr>
+          <tr><th>Per app</th><td>The busiest processes since launch, or per-interface totals for the selected range</td></tr>
+          <tr><th>Data cap</th><td>Progress against your plan, a reset day, and threshold notifications</td></tr>
+          <tr><th>Menu bar</th><td>A quiet activity glyph, the live rate, or the cycle total</td></tr>
+          <tr><th>Appearance</th><td>Light, dark, or follow the system, with a panel opacity slider</td></tr>
+          <tr><th>Command line</th><td><code>netmeter report --range cycle</code> and friends, reading the same history</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap cols">
+      <h2>Screenshots</h2>
+      <div class="body shots">
+        <figure><img src="range.png" alt="The range picker with quick chips and a custom From and To" loading="lazy" width="680" height="1048"><figcaption>Choosing a time range</figcaption></figure>
+        <figure><img src="settings.png" alt="Settings: data cap, alerts, menu bar and units" loading="lazy" width="680" height="1048"><figcaption>Settings</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap cols">
+      <h2>Other ways to install</h2>
+      <div class="body">
+        <p>Download <a href="https://github.com/omerdikyol/netmeter/releases/latest">the .dmg or .zip from Releases</a>, open it, and drag NetMeter into Applications. Or build it from source with Rust 1.80 or newer:</p>
+        <pre><code>git clone https://github.com/omerdikyol/netmeter
+cd netmeter
+cargo build --release
+packaging/macos/bundle.sh
+open dist/NetMeter.app</code></pre>
+        <p class="note">Left-click the menu bar icon for the panel, right-click for Settings and Quit. If you use a menu bar manager such as Ice or Bartender and the icon does not appear, move NetMeter to the always-visible section.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap cols">
+      <h2>Good to know</h2>
+      <div class="body">
+        <p>NetMeter only counts while it is running, so totals cover that time and the panel says since when. Turn on launch at login to avoid gaps. Per-app numbers come from <code>nettop</code> and cover only what happened while the app was open.</p>
+        <p>It is macOS only for now. The core crate (sampling, storage, statistics) is platform-neutral; the panel's webview needs work on Linux and Windows has not been tried.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>NetMeter is free software under MIT or Apache-2.0.</span>
+    <a href="https://github.com/omerdikyol/netmeter">GitHub</a>
+    <a href="https://github.com/omerdikyol/netmeter/blob/main/CHANGELOG.md">Changelog</a>
+    <a href="https://github.com/omerdikyol/netmeter/issues">Report an issue</a>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll("[data-copy]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var text = document.getElementById(button.dataset.copy).textContent;
+      navigator.clipboard.writeText(text).then(function () {
+        button.textContent = "Copied";
+        setTimeout(function () { button.textContent = "Copy"; }, 1500);
+      });
+    });
+  });
+  var clock = document.getElementById("clock");
+  function tick() {
+    clock.textContent = new Date().toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+  }
+  tick();
+  setInterval(tick, 15000);
+</script>
+</body>
+</html>

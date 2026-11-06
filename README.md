@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://omerdikyol.github.io/netmeter/">Website</a> ·
   <a href="#install">Install</a> ·
   <a href="#features">Features</a> ·
   <a href="#screenshots">Screenshots</a> ·
@@ -33,6 +34,8 @@
 </p>
 
 ## Project entry points
+
+- [The website](https://omerdikyol.github.io/netmeter/) runs the real panel UI in the browser on made-up traffic ([site/](site)).
 
 - [Download a release](https://github.com/omerdikyol/netmeter/releases) or use [the Homebrew tap](https://github.com/omerdikyol/homebrew-netmeter).
 - [netmeter-core](crates/netmeter-core/src) contains sampling, persisted state, formatting, and statistics.
